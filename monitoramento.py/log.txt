@@ -1,4 +1,0 @@
-2024-10-28 17:17:17 - Iniciado monitoramento de: C:/Users/Usuario/Desktop
-2024-10-28 17:17:17 - Tentando copiar de C:\Users\Usuario\Desktop\PY\monitoramento.py\log.txt para C:/Users/Usuario/Downloads\PY\monitoramento.py\log.txt
-2024-10-28 17:17:17 - Criando diretório: C:/Users/Usuario/Downloads\PY\monitoramento.py
-2024-10-28 17:17:17 - Arquivo copiado: C:\Users\Usuario\Desktop\PY\monitoramento.py\log.txt

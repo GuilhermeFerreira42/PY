@@ -42,11 +42,17 @@ class LimitadorCaracteresApp:
         ttk.Button(frame_botoes_texto, text="Selecionar Tudo", command=lambda: self.selecionar_tudo(self.entry_texto)).grid(row=0, column=2, padx=5)
         ttk.Button(frame_botoes_texto, text="Limpar", command=lambda: self.limpar(self.entry_texto)).grid(row=0, column=3, padx=5)
 
-        # Botão "Configurar Textos"
-        ttk.Button(self.root, text="Configurar Textos", command=self.configurar_textos).pack(pady=10)
+        # Adiciona Label para contagem de caracteres
+        self.label_contagem_texto = ttk.Label(self.root, text="Caracteres: 0")
+        self.label_contagem_texto.pack(pady=5)
 
-        # Botão "Processar"
-        ttk.Button(self.root, text="Processar", command=self.processar_texto).pack(pady=10)
+        # Botão "Configurar Textos" e "Processar"
+        frame_botoes = ttk.Frame(self.root)
+        frame_botoes.pack(pady=10)
+
+        ttk.Button(frame_botoes, text="Configurar Textos", command=self.configurar_textos).pack(side=tk.LEFT, padx=5)
+        ttk.Button(frame_botoes, text="Processar", command=self.processar_texto).pack(side=tk.LEFT, padx=5)
+
 
         # Rótulo e campo para mostrar o texto processado com barra de rolagem
         label_resultado = ttk.Label(self.root, text="Texto processado:")
@@ -69,6 +75,30 @@ class LimitadorCaracteresApp:
         ttk.Button(frame_botoes_resultado, text="Colar", command=lambda: self.colar(self.entry_resultado)).grid(row=0, column=1, padx=5)
         ttk.Button(frame_botoes_resultado, text="Selecionar Tudo", command=lambda: self.selecionar_tudo(self.entry_resultado)).grid(row=0, column=2, padx=5)
         ttk.Button(frame_botoes_resultado, text="Limpar", command=lambda: self.limpar(self.entry_resultado)).grid(row=0, column=3, padx=5)
+
+        # Adiciona Label para contagem de caracteres no resultado
+        self.label_contagem_resultado = ttk.Label(self.root, text="Caracteres: 0")
+        self.label_contagem_resultado.pack(pady=5)
+
+        # Bind para atualizar contagem de caracteres
+        self.entry_texto.bind("<<Modified>>", self.atualizar_contagem_texto)
+        self.entry_resultado.bind("<<Modified>>", self.atualizar_contagem_resultado)
+
+    # Função para contar os caracteres do resto
+    def atualizar_contagem_texto(self, evento):
+        # Desmarcar o estado de modificação para que o evento seja chamado novamente
+        self.entry_texto.edit_modified(False)
+        
+        texto = self.entry_texto.get("1.0", tk.END)
+        self.label_contagem_texto.config(text=f"Caracteres: {len(texto.strip())}")
+
+    def atualizar_contagem_resultado(self, evento):
+        # Desmarcar o estado de modificação para que o evento seja chamado novamente
+        self.entry_resultado.edit_modified(False)
+        
+        texto = self.entry_resultado.get("1.0", tk.END)
+        self.label_contagem_resultado.config(text=f"Caracteres: {len(texto.strip())}")
+
 
     # Função para processar o texto
     def processar_texto(self):
@@ -113,6 +143,13 @@ class LimitadorCaracteresApp:
         janela_config.transient(self.root)
         janela_config.grab_set()
 
+        # Centralizar a janela
+        largura_janela = 400
+        altura_janela = 400
+        x = self.root.winfo_x() + (self.root.winfo_width() // 2) - (largura_janela // 2)
+        y = self.root.winfo_y() + (self.root.winfo_height() // 2) - (altura_janela // 2)
+        janela_config.geometry(f"{largura_janela}x{altura_janela}+{x}+{y}")
+
         label_antes = ttk.Label(janela_config, text="Texto antes:")
         label_antes.pack(pady=5)
         entry_antes = tk.Text(janela_config, height=5, width=50)
@@ -156,7 +193,13 @@ class LimitadorCaracteresApp:
         janela_presets.transient(self.root)
         janela_presets.grab_set()
 
-        label_presets = ttk.Label(janela_presets, text="Selecione um preset ou insira um novo nome:")
+        # Centralizar a janela
+        largura_janela = 300
+        altura_janela = 300
+        x = self.root.winfo_x() + (self.root.winfo_width() // 2) - (largura_janela // 2)
+        y = self.root.winfo_y() + (self.root.winfo_height() // 2) - (altura_janela // 2)
+        janela_presets.geometry(f"{largura_janela}x{altura_janela}+{x}+{y}")
+
         label_presets = ttk.Label(janela_presets, text="Selecione um preset ou insira um novo nome:")
         label_presets.pack(pady=5)
 
@@ -210,6 +253,13 @@ class LimitadorCaracteresApp:
         janela_presets.transient(self.root)
         janela_presets.grab_set()
 
+        # Centralizar a janela
+        largura_janela = 300
+        altura_janela = 300
+        x = self.root.winfo_x() + (self.root.winfo_width() // 2) - (largura_janela // 2)
+        y = self.root.winfo_y() + (self.root.winfo_height() // 2) - (altura_janela // 2)
+        janela_presets.geometry(f"{largura_janela}x{altura_janela}+{x}+{y}")
+
         label_presets = ttk.Label(janela_presets, text="Selecione um preset:")
         label_presets.pack(pady=5)
 
@@ -253,6 +303,7 @@ class LimitadorCaracteresApp:
 
         botao_deletar = ttk.Button(janela_presets, text="Deletar", command=deletar_preset)
         botao_deletar.pack(pady=10)
+
 
     # Função para adicionar menu de contexto
     def add_context_menu(self, widget):
