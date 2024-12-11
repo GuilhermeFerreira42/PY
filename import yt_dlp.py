@@ -40,25 +40,19 @@ def clean_and_consolidate_subtitles(subtitle_file):
             content = file.read()
 
         # Remove linhas de tempo e metadados como "WEBVTT" ou "Kind: captions"
-        content = re.sub(r'WEBVTT|Kind:.*|Language:.*', '', content)
+        content = re.sub(r'(WEBVTT|Kind:.*|Language:.*)', '', content)
         content = re.sub(r'\d{2}:\d{2}:\d{2}\.\d{3} --> .*?\n', '', content)
 
-        # Remove tags detalhadas (<00:00:00.030><c>), mantendo apenas o texto
+        # Remove tags detalhadas (<00:00:00.030><c>) e espaços extras
         content = re.sub(r'<.*?>', '', content)
+        content = re.sub(r'align:start position:\d+%|\n+', '\n', content).strip()
 
-        # Remove linhas vazias e espaços extras
-        content = re.sub(r'\n+', ' ', content).strip()
+        # Processa as linhas e elimina duplicatas (não apenas consecutivas)
+        lines = content.splitlines()
+        unique_lines = list(dict.fromkeys(line.strip() for line in lines if line.strip()))
 
-        # Remove duplicatas consecutivas (linhas repetidas)
-        words = content.split()
-        unique_words = []
-        prev_word = None
-        for word in words:
-            if word != prev_word:
-                unique_words.append(word)
-            prev_word = word
-
-        consolidated_text = ' '.join(unique_words).strip()
+        # Junta as linhas em um texto contínuo com quebras de linha apropriadas
+        consolidated_text = '\n'.join(unique_lines).strip()
 
         # Salva o texto consolidado
         cleaned_filename = subtitle_file.replace('.vtt', '_consolidated.txt')
@@ -70,6 +64,7 @@ def clean_and_consolidate_subtitles(subtitle_file):
     except Exception as e:
         print(f"Erro ao limpar e consolidar as legendas: {e}")
         return None
+
 
 def main():
     print("Bem-vindo ao Programa de Transcrição de Vídeos do YouTube!")
@@ -90,5 +85,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 # https://www.youtube.com/watch?v=jNjKMuQASio
