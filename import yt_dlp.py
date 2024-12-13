@@ -72,11 +72,11 @@ class SubtitleApp(wx.Frame):
 
         # Contador de palavras para o texto original
         self.word_count_label = wx.StaticText(panel, label="Palavras: 0")
-        vbox.Add(self.word_count_label, flag=wx.ALIGN_RIGHT | wx.RIGHT | wx.BOTTOM, border=10)
+        vbox.Add(self.word_count_label, flag=wx.ALIGN_LEFT | wx.LEFT | wx.BOTTOM, border=10)
 
         # Contador de palavras para o resumo
         self.summary_word_count_label = wx.StaticText(panel, label="Palavras (Resumo): 0")
-        vbox.Add(self.summary_word_count_label, flag=wx.ALIGN_RIGHT | wx.RIGHT | wx.BOTTOM, border=10)
+        vbox.Add(self.summary_word_count_label, flag=wx.ALIGN_LEFT | wx.LEFT | wx.BOTTOM, border=10)
 
         panel.SetSizer(vbox)
 
