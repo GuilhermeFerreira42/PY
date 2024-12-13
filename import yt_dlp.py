@@ -30,7 +30,7 @@ class SubtitleApp(wx.Frame):
         
         vbox.Add(hbox1, flag=wx.EXPAND | wx.LEFT | wx.RIGHT | wx.TOP, border=10)
 
-        # Botões principais e contador de palavras
+        # Botões principais e barra de progresso
         hbox2 = wx.BoxSizer(wx.HORIZONTAL)
 
         # Alinhado à esquerda
@@ -47,21 +47,36 @@ class SubtitleApp(wx.Frame):
         self.copy_button.Bind(wx.EVT_BUTTON, self.OnCopy)
         left_box.Add(self.copy_button, flag=wx.LEFT | wx.RIGHT, border=5)
 
+        self.summarize_button = wx.Button(panel, label="Resumir")
+        self.summarize_button.Bind(wx.EVT_BUTTON, self.OnSummarize)
+        left_box.Add(self.summarize_button, flag=wx.LEFT | wx.RIGHT, border=5)
+
         self.progress_bar = wx.Gauge(panel, range=100, size=(250, 25))
         left_box.Add(self.progress_bar, flag=wx.LEFT, border=10)
 
         hbox2.Add(left_box, flag=wx.ALIGN_LEFT)
-
-        # Alinhado à direita
-        self.word_count_label = wx.StaticText(panel, label="Palavras: 0")
-        hbox2.AddStretchSpacer()
-        hbox2.Add(self.word_count_label, flag=wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, border=10)
-
         vbox.Add(hbox2, flag=wx.EXPAND | wx.TOP | wx.BOTTOM, border=10)
 
         # Caixa de texto para texto processado
+        hbox3 = wx.BoxSizer(wx.HORIZONTAL)
+
+        # Tela original de texto
         self.text_ctrl = wx.TextCtrl(panel, style=wx.TE_MULTILINE | wx.TE_READONLY)
-        vbox.Add(self.text_ctrl, proportion=1, flag=wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, border=10)
+        hbox3.Add(self.text_ctrl, proportion=1, flag=wx.EXPAND | wx.ALL, border=5)
+
+        # Nova tela para resumo
+        self.summary_ctrl = wx.TextCtrl(panel, style=wx.TE_MULTILINE | wx.TE_READONLY)
+        hbox3.Add(self.summary_ctrl, proportion=1, flag=wx.EXPAND | wx.ALL, border=5)
+
+        vbox.Add(hbox3, proportion=1, flag=wx.EXPAND)
+
+        # Contador de palavras para o texto original
+        self.word_count_label = wx.StaticText(panel, label="Palavras: 0")
+        vbox.Add(self.word_count_label, flag=wx.ALIGN_RIGHT | wx.RIGHT | wx.BOTTOM, border=10)
+
+        # Contador de palavras para o resumo
+        self.summary_word_count_label = wx.StaticText(panel, label="Palavras (Resumo): 0")
+        vbox.Add(self.summary_word_count_label, flag=wx.ALIGN_RIGHT | wx.RIGHT | wx.BOTTOM, border=10)
 
         panel.SetSizer(vbox)
 
@@ -109,6 +124,7 @@ class SubtitleApp(wx.Frame):
         """Limpa todos os campos."""
         self.url_text.SetValue("")
         self.text_ctrl.SetValue("")
+        self.summary_ctrl.SetValue("")
         self.progress_bar.SetValue(0)
         self.word_count_label.SetLabel("Palavras: 0")
 
@@ -123,16 +139,23 @@ class SubtitleApp(wx.Frame):
         else:
             wx.MessageBox("Nada para copiar.", "Erro", wx.ICON_ERROR)
 
+    def OnSummarize(self, event):
+        """Evento para resumir o texto (a funcionalidade será implementada depois)."""
+        wx.MessageBox("Função de resumo ainda não implementada.", "Informação", wx.ICON_INFORMATION)
+
+        # Exemplo de como contar palavras no texto resumido (após implementar o resumo)
+        summary_content = self.summary_ctrl.GetValue()  # Texto do resumo
+        summary_word_count = len(summary_content.split())
+        self.summary_word_count_label.SetLabel(f"Palavras (Resumo): {summary_word_count}")
+
+# Funções auxiliares para download e processamento de legendas
 def download_subtitles(video_url):
-    """
-    Função para baixar as legendas do vídeo no YouTube em português (pt-br).
-    """
     ydl_opts = {
-        'writesubtitles': True,         # Habilita o download de legendas
-        'writeautomaticsub': True,      # Habilita o download de legendas automáticas
-        'subtitleslangs': ['pt', 'pt-br'], # Idioma das legendas
-        'skip_download': True,          # Pula o download do vídeo
-        'quiet': False                  # Exibe mensagens de log para depuração
+        'writesubtitles': True,
+        'writeautomaticsub': True,
+        'subtitleslangs': ['pt', 'pt-br'],
+        'skip_download': True,
+        'quiet': False
     }
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -153,30 +176,21 @@ def download_subtitles(video_url):
             return None
 
 def clean_and_consolidate_subtitles(subtitle_file):
-    """
-    Função para consolidar legendas em um texto contínuo sem repetições.
-    """
     try:
         with open(subtitle_file, 'r', encoding='utf-8') as file:
             content = file.read()
 
-        # Remove linhas de tempo e metadados como "WEBVTT" ou "Kind: captions"
         content = re.sub(r'(WEBVTT|Kind:.*|Language:.*)', '', content)
         content = re.sub(r'\d{2}:\d{2}:\d{2}\.\d{3} --> .*?\n', '', content)
-
-        # Remove tags detalhadas (<00:00:00.030><c>) e espaços extras
         content = re.sub(r'<.*?>', '', content)
-        content = re.sub(r'&nbsp;', ' ', content)  # Substitui &nbsp; por espaço
+        content = re.sub(r'&nbsp;', ' ', content)
         content = re.sub(r'align:start position:\d+%|\n+', '\n', content).strip()
 
-        # Processa as linhas e elimina duplicatas (não apenas consecutivas)
         lines = content.splitlines()
         unique_lines = list(dict.fromkeys(line.strip() for line in lines if line.strip()))
 
-        # Junta as linhas em um texto contínuo com quebras de linha apropriadas
         consolidated_text = '\n'.join(unique_lines).strip()
 
-        # Salva o texto consolidado
         cleaned_filename = subtitle_file.replace('.vtt', '_consolidated.txt')
         with open(cleaned_filename, 'w', encoding='utf-8') as file:
             file.write(consolidated_text)
@@ -189,5 +203,5 @@ def clean_and_consolidate_subtitles(subtitle_file):
 
 if __name__ == "__main__":
     app = wx.App()
-    SubtitleApp(None, title="Transcrição de Vídeos do YouTube")
+    SubtitleApp(None, title="Transcrição e Resumo de Vídeos do YouTube")
     app.MainLoop()
