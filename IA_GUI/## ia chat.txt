@@ -1,0 +1,41 @@
+## ia chat
+Estamos discutindo um projeto e organizando as ideias. Estamos criando um programa resumidor com Yan, que será semelhante a um navegador com várias abas. A primeira aba resumirá vídeos do YouTube que inserirmos, trazendo a transcrição e a opção de resumir. A segunda aba resumirá vídeos offline que já temos no computador. A terceira aba será um resumidor de PDF, com um chat para resumir ou fazer perguntas sobre o arquivo. Todas as abas terão um chat. O programa usará inteligência artificial da Meta. Já tenho parte do código funcionando e um protótipo em wxPython. Precisamos organizar as ideias para começar a implementar o programa com os requisitos mencionados. 
+
+Para organizar as ideias, podemos estruturar o projeto em etapas claras e definir os requisitos de cada aba. Esta é uma proposta inicial: 
+
+Estrutura do Programa 
+Interface Principal (wxPython) com múltiplas abas, cada uma com funcionalidades específicas. Um layout intuitivo e responsivo para facilitar a navegação, além de um chat integrado em todas as abas. 
+
+Funcionalidades por Aba 
+Para a aba de resumir vídeos do YouTube, haverá um campo para inserir o link do vídeo. O sistema fará o download automático das legendas e exibirá a transcrição, com um botão para resumir a transcrição com a IA e chat para interagir. A aba de vídeos offline permitirá carregar arquivos de vídeo do computador, extraindo áudio e fazendo a transcrição, que também poderá ser resumida com a IA. Na aba de PDFs, será possível carregar arquivos, visualizar o conteúdo, gerar um resumo com a IA e fazer perguntas ou refinar o resumo através do chat. 
+
+O programa terá inteligência artificial integrada ao modelo da Meta para processar e resumir textos, com chat similar ao GPT em todas as abas. A estrutura do código será modular, com a interface e cada aba separadamente. Um módulo específico será designado para cada função. 
+
+Os próximos passos incluem definir o layout da interface, finalizar os requisitos e as entradas/saídas para cada aba, estruturar os módulos para processar os dados, integrar a IA da Meta para o chat e os resumos, e testar a interação entre as abas e a IA. 
+
+Vamos fazer em orientado objeto e dividir em fases. Monte para mim apenas o front-end do programa em wxPython. E monte uma árvore binária dos arquivos main do programa. Explique a lógica que vamos abordar. Explique para mim onde ficará mais ou menos cada função, como vamos dividir. Se vamos programar cada aba para alguma coisa ou se vamos dividir, tem funções. Cada página de código executa uma função e assim por diante. 
+
+Adotaremos uma abordagem orientada a objetos e dividiremos o programa em classes para cada aba. A janela principal (MainFrame) gerenciará as abas, que serão instâncias de classes separadas. 
+
+Árvore binária dos arquivos principais do programa: 
+Main. py 
+├── YouTubePage. py 
+├── OfflineVideoPage. py 
+├── PDFPage. py 
+├── ChatHandler. py 
+├── Utils/ 
+│ ├── YouTubeUtils. py 
+│ ├── VideoUtils. py 
+│ ├── PDFUtils. py 
+│ ├── AIUtils. py 
+└── Assets/ 
+├── Icons/ 
+├── Themes/ 
+
+A janela principal é responsável por criá-la e gerenciar as abas. Cada aba terá suas próprias funções de front-end com chamadas a funções nos arquivos da pasta Utils. As funções do chat estarão centralizadas em ChatHandler. py. 
+
+O programa será modular, onde cada aba trata apenas da interface e chamadas a funções, deixando o processamento para as funções utilitárias. Quando uma nova aba for adicionada, bastará criar uma nova classe e módulo utilitário correspondente. 
+
+Em relação ao código do front-end em wxPython, a estrutura inicial inclui a criação da janela principal e as abas para vídeos do YouTube, vídeos offline e PDFs, cada uma com um layout básico de botões e campos de input. 
+
+Nos próximos passos, precisamos dividir o código em arquivos separados, criar módulos utilitários e integrar a lógica do chat nas abas. Também é essencial testar o protótipo com dados reais e ajustar a interface.

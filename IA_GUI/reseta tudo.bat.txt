@@ -1,0 +1,17 @@
+@echo off
+mkdir MyProject
+cd MyProject
+mkdir Utils Assets Assets\Icons Assets\Themes
+echo "" > Main.py
+echo "" > YouTubePage.py
+echo "" > OfflineVideoPage.py
+echo "" > PDFPage.py
+echo "" > ChatHandler.py
+echo "" > Utils\YouTubeUtils.py
+echo "" > Utils\VideoUtils.py
+echo "" > Utils\PDFUtils.py
+echo "" > Utils\AIUtils.py
+echo "" > Assets\Icons\.gitkeep
+echo "" > Assets\Themes\.gitkeep
+echo Estrutura de diretórios e arquivos criada com sucesso!
+pause

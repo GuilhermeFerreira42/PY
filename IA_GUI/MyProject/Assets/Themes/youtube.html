@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Aba do YouTube</title>
+    <link rel="stylesheet" href="styles.css"> <!-- Adicione seu CSS aqui -->
+</head>
+<body>
+    < ```html
+    <h1>Transcrição de Vídeos do YouTube</h1>
+    <input type="text" id="videoUrl" placeholder="Cole a URL do vídeo aqui">
+    <button id="summarizeButton">Processar</button>
+    <div id="result"></div>
+
+    <script>
+        document.getElementById('summarizeButton').addEventListener('click', function() {
+            const videoUrl = document.getElementById('videoUrl').value;
+            fetch('/summarize', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ video_url: videoUrl })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.transcription) {
+                    document.getElementById('result').innerText = data.transcription;
+                } else {
+                    document.getElementById('result').innerText = data.error;
+                }
+            })
+            .catch(error => {
+                document.getElementById('result').innerText = 'Erro ao processar a solicitação.';
+            });
+        });
+    </script>
+</body>
+</html>
