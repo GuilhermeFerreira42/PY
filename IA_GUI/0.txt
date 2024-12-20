@@ -1,0 +1,401 @@
+## ia chat
+Estamos discutindo um projeto e organizando as ideias. Estamos criando um programa resumidor com Yan, que será semelhante a um navegador com várias abas. A primeira aba resumirá vídeos do YouTube que inserirmos, trazendo a transcrição e a opção de resumir. A segunda aba resumirá vídeos offline que já temos no computador. A terceira aba será um resumidor de PDF, com um chat para resumir ou fazer perguntas sobre o arquivo. Todas as abas terão um chat. O programa usará inteligência artificial da Meta. Já tenho parte do código funcionando e um protótipo em wxPython. Precisamos organizar as ideias para começar a implementar o programa com os requisitos mencionados. 
+
+Para organizar as ideias, podemos estruturar o projeto em etapas claras e definir os requisitos de cada aba. Esta é uma proposta inicial: 
+
+Estrutura do Programa 
+Interface Principal (wxPython) com múltiplas abas, cada uma com funcionalidades específicas. Um layout intuitivo e responsivo para facilitar a navegação, além de um chat integrado em todas as abas. 
+
+Funcionalidades por Aba 
+Para a aba de resumir vídeos do YouTube, haverá um campo para inserir o link do vídeo. O sistema fará o download automático das legendas e exibirá a transcrição, com um botão para resumir a transcrição com a IA e chat para interagir. A aba de vídeos offline permitirá carregar arquivos de vídeo do computador, extraindo áudio e fazendo a transcrição, que também poderá ser resumida com a IA. Na aba de PDFs, será possível carregar arquivos, visualizar o conteúdo, gerar um resumo com a IA e fazer perguntas ou refinar o resumo através do chat. 
+
+O programa terá inteligência artificial integrada ao modelo da Meta para processar e resumir textos, com chat similar ao GPT em todas as abas. A estrutura do código será modular, com a interface e cada aba separadamente. Um módulo específico será designado para cada função. 
+
+Os próximos passos incluem definir o layout da interface, finalizar os requisitos e as entradas/saídas para cada aba, estruturar os módulos para processar os dados, integrar a IA da Meta para o chat e os resumos, e testar a interação entre as abas e a IA. 
+
+Vamos fazer em orientado objeto e dividir em fases. Monte para mim apenas o front-end do programa em wxPython. E monte uma árvore binária dos arquivos main do programa. Explique a lógica que vamos abordar. Explique para mim onde ficará mais ou menos cada função, como vamos dividir. Se vamos programar cada aba para alguma coisa ou se vamos dividir, tem funções. Cada página de código executa uma função e assim por diante. 
+
+Adotaremos uma abordagem orientada a objetos e dividiremos o programa em classes para cada aba. A janela principal (MainFrame) gerenciará as abas, que serão instâncias de classes separadas. 
+
+Árvore binária dos arquivos principais do programa: 
+Main. py 
+├── YouTubePage. py 
+├── OfflineVideoPage. py 
+├── PDFPage. py 
+├── ChatHandler. py 
+├── Utils/ 
+│ ├── YouTubeUtils. py 
+│ ├── VideoUtils. py 
+│ ├── PDFUtils. py 
+│ ├── AIUtils. py 
+└── Assets/ 
+├── Icons/ 
+├── Themes/ 
+
+A janela principal é responsável por criá-la e gerenciar as abas. Cada aba terá suas próprias funções de front-end com chamadas a funções nos arquivos da pasta Utils. As funções do chat estarão centralizadas em ChatHandler. py. 
+
+O programa será modular, onde cada aba trata apenas da interface e chamadas a funções, deixando o processamento para as funções utilitárias. Quando uma nova aba for adicionada, bastará criar uma nova classe e módulo utilitário correspondente. 
+
+Em relação ao código do front-end em wxPython, a estrutura inicial inclui a criação da janela principal e as abas para vídeos do YouTube, vídeos offline e PDFs, cada uma com um layout básico de botões e campos de input. 
+
+Nos próximos passos, precisamos dividir o código em arquivos separados, criar módulos utilitários e integrar a lógica do chat nas abas. Também é essencial testar o protótipo com dados reais e ajustar a interface.
+
+
+vamos começar pela aba do youtube 
+esse é o código que eu já tenho funcionando
+
+```
+import wx
+import yt_dlp
+import re
+import os
+from wx.lib.pubsub import pub
+import threading
+
+class SubtitleApp(wx.Frame):
+    def __init__(self, parent, title):
+        super(SubtitleApp, self).__init__(parent, title=title, size=(800, 600))
+
+        self.InitUI()
+        self.Centre()
+        self.Show()
+
+    def InitUI(self):
+        panel = wx.Panel(self)
+        vbox = wx.BoxSizer(wx.VERTICAL)
+
+        # Linha para URL e botão "Colar"
+        hbox1 = wx.BoxSizer(wx.HORIZONTAL)
+        self.url_label = wx.StaticText(panel, label="URL do Vídeo:")
+        hbox1.Add(self.url_label, flag=wx.RIGHT, border=8)
+        self.url_text = wx.TextCtrl(panel)
+        hbox1.Add(self.url_text, proportion=1)
+        
+        self.paste_button = wx.Button(panel, label="Colar")
+        self.paste_button.Bind(wx.EVT_BUTTON, self.OnPaste)
+        hbox1.Add(self.paste_button, flag=wx.LEFT, border=8)
+        
+        vbox.Add(hbox1, flag=wx.EXPAND | wx.LEFT | wx.RIGHT | wx.TOP, border=10)
+
+        # Botões principais e barra de progresso
+        hbox2 = wx.BoxSizer(wx.HORIZONTAL)
+
+        # Alinhado à esquerda
+        left_box = wx.BoxSizer(wx.HORIZONTAL)
+        self.process_button = wx.Button(panel, label="Processar")
+        self.process_button.Bind(wx.EVT_BUTTON, self.OnProcess)
+        left_box.Add(self.process_button)
+
+        self.clear_button = wx.Button(panel, label="Limpar")
+        self.clear_button.Bind(wx.EVT_BUTTON, self.OnClear)
+        left_box.Add(self.clear_button, flag=wx.LEFT | wx.RIGHT, border=5)
+
+        self.copy_button = wx.Button(panel, label="Copiar")
+        self.copy_button.Bind(wx.EVT_BUTTON, self.OnCopy)
+        left_box.Add(self.copy_button, flag=wx.LEFT | wx.RIGHT, border=5)
+
+        self.summarize_button = wx.Button(panel, label="Resumir")
+        self.summarize_button.Bind(wx.EVT_BUTTON, self.OnSummarize)
+        left_box.Add(self.summarize_button, flag=wx.LEFT | wx.RIGHT, border=5)
+
+        self.progress_bar = wx.Gauge(panel, range=100, size=(250, 25))
+        left_box.Add(self.progress_bar, flag=wx.LEFT, border=10)
+
+        hbox2.Add(left_box, flag=wx.ALIGN_LEFT)
+        vbox.Add(hbox2, flag=wx.EXPAND | wx.TOP | wx.BOTTOM, border=10)
+
+        # Caixa de texto para texto processado
+        hbox3 = wx.BoxSizer(wx.HORIZONTAL)
+
+        # Tela original de texto
+        self.text_ctrl = wx.TextCtrl(panel, style=wx.TE_MULTILINE | wx.TE_READONLY)
+        hbox3.Add(self.text_ctrl, proportion=1, flag=wx.EXPAND | wx.ALL, border=5)
+
+        # Nova tela para resumo
+        self.summary_ctrl = wx.TextCtrl(panel, style=wx.TE_MULTILINE | wx.TE_READONLY)
+        hbox3.Add(self.summary_ctrl, proportion=1, flag=wx.EXPAND | wx.ALL, border=5)
+
+        vbox.Add(hbox3, proportion=1, flag=wx.EXPAND)
+
+        # Contador de palavras para o texto original
+        self.word_count_label = wx.StaticText(panel, label="Palavras: 0")
+        vbox.Add(self.word_count_label, flag=wx.ALIGN_RIGHT | wx.RIGHT | wx.BOTTOM, border=10)
+
+        # Contador de palavras para o resumo
+        self.summary_word_count_label = wx.StaticText(panel, label="Palavras (Resumo): 0")
+        vbox.Add(self.summary_word_count_label, flag=wx.ALIGN_RIGHT | wx.RIGHT | wx.BOTTOM, border=10)
+
+        panel.SetSizer(vbox)
+
+    def OnPaste(self, event):
+        """Cola o conteúdo da área de transferência na URL e limpa o campo antes."""
+        if wx.TheClipboard.Open():
+            if wx.TheClipboard.IsSupported(wx.DataFormat(wx.DF_TEXT)):
+                data = wx.TextDataObject()
+                wx.TheClipboard.GetData(data)
+                self.url_text.SetValue(data.GetText())
+            wx.TheClipboard.Close()
+
+    def OnProcess(self, event):
+        """Inicia o processamento do vídeo."""
+        video_url = self.url_text.GetValue()
+        if not video_url:
+            wx.MessageBox("Por favor, insira uma URL do vídeo.", "Erro", wx.ICON_ERROR)
+            return
+
+        self.progress_bar.SetValue(10)  # Atualiza a barra de progresso
+
+        def run():
+            subtitle_file = download_subtitles(video_url)
+            if subtitle_file:
+                self.progress_bar.SetValue(70)
+                consolidated_file = clean_and_consolidate_subtitles(subtitle_file)
+                self.progress_bar.SetValue(100)
+                if consolidated_file:
+                    with open(consolidated_file, 'r', encoding='utf-8') as file:
+                        content = file.read()
+                    wx.CallAfter(self.text_ctrl.SetValue, content)
+
+                    # Contar palavras e atualizar o contador
+                    word_count = len(content.split())
+                    wx.CallAfter(self.word_count_label.SetLabel, f"Palavras: {word_count}")
+                else:
+                    wx.CallAfter(wx.MessageBox, "Erro ao consolidar as legendas.", "Erro", wx.ICON_ERROR)
+            else:
+                wx.CallAfter(wx.MessageBox, "Não foi possível obter as legendas.", "Erro", wx.ICON_ERROR)
+
+        thread = threading.Thread(target=run)
+        thread.start()
+
+    def OnClear(self, event):
+        """Limpa todos os campos."""
+        self.url_text.SetValue("")
+        self.text_ctrl.SetValue("")
+        self.summary_ctrl.SetValue("")
+        self.progress_bar.SetValue(0)
+        self.word_count_label.SetLabel("Palavras: 0")
+
+    def OnCopy(self, event):
+        """Copia o texto processado para a área de transferência."""
+        text = self.text_ctrl.GetValue()
+        if text:
+            if wx.TheClipboard.Open():
+                wx.TheClipboard.SetData(wx.TextDataObject(text))
+                wx.TheClipboard.Close()
+                wx.MessageBox("Texto copiado com sucesso!", "Informação", wx.ICON_INFORMATION)
+        else:
+            wx.MessageBox("Nada para copiar.", "Erro", wx.ICON_ERROR)
+
+    def OnSummarize(self, event):
+        """Evento para resumir o texto (a funcionalidade será implementada depois)."""
+        wx.MessageBox("Função de resumo ainda não implementada.", "Informação", wx.ICON_INFORMATION)
+
+        # Exemplo de como contar palavras no texto resumido (após implementar o resumo)
+        summary_content = self.summary_ctrl.GetValue()  # Texto do resumo
+        summary_word_count = len(summary_content.split())
+        self.summary_word_count_label.SetLabel(f"Palavras (Resumo): {summary_word_count}")
+
+# Funções auxiliares para download e processamento de legendas
+def download_subtitles(video_url):
+    ydl_opts = {
+        'writesubtitles': True,
+        'writeautomaticsub': True,
+        'subtitleslangs': ['pt', 'pt-br'],
+        'skip_download': True,
+        'quiet': False
+    }
+
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        try:
+            result = ydl.extract_info(video_url, download=False)
+            subtitle_file = None
+
+            if 'requested_subtitles' in result:
+                subtitle_file = ydl.prepare_filename(result)
+                subtitle_file = subtitle_file.rsplit('.', 1)[0] + '.pt.vtt'
+                ydl.download([video_url])
+                print(f"Legendas baixadas para: {subtitle_file}")
+            else:
+                print("Nenhuma legenda em português disponível.")
+            return subtitle_file
+        except Exception as e:
+            print(f"Erro ao baixar legendas: {e}")
+            return None
+
+def clean_and_consolidate_subtitles(subtitle_file):
+    try:
+        with open(subtitle_file, 'r', encoding='utf-8') as file:
+            content = file.read()
+
+        content = re.sub(r'(WEBVTT|Kind:.*|Language:.*)', '', content)
+        content = re.sub(r'\d{2}:\d{2}:\d{2}\.\d{3} --> .*?\n', '', content)
+        content = re.sub(r'<.*?>', '', content)
+        content = re.sub(r'&nbsp;', ' ', content)
+        content = re.sub(r'align:start position:\d+%|\n+', '\n', content).strip()
+
+        lines = content.splitlines()
+        unique_lines = list(dict.fromkeys(line.strip() for line in lines if line.strip()))
+
+        consolidated_text = '\n'.join(unique_lines).strip()
+
+        cleaned_filename = subtitle_file.replace('.vtt', '_consolidated.txt')
+        with open(cleaned_filename, 'w', encoding='utf-8') as file:
+            file.write(consolidated_text)
+
+        print(f"Texto consolidado salvo em: {cleaned_filename}")
+        return cleaned_filename
+    except Exception as e:
+        print(f"Erro ao limpar e consolidar as legendas: {e}")
+        return None
+
+if __name__ == "__main__":
+    app = wx.App()
+    SubtitleApp(None, title="Transcrição e Resumo de Vídeos do YouTube")
+    app.MainLoop()
+
+```
+
+e tenho esse código do chat que conversa com a IA
+
+```
+import wx
+import requests
+import json
+import threading
+import time
+
+# Configuração da API
+API_URL = "http://localhost:11434/v1/chat/completions"
+MODEL_NAME = "gemma2:2b"  # Alterado para o modelo correto
+
+class ChatApp(wx.Frame):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # Configurar a interface
+        self.SetTitle("Chat com IA")
+        self.SetSize((600, 400))
+        panel = wx.Panel(self)
+
+        vbox = wx.BoxSizer(wx.VERTICAL)
+
+        # Substituir painel simples por ScrolledWindow
+        self.history = wx.ScrolledWindow(panel, size=(-1, 300), style=wx.VSCROLL | wx.ALWAYS_SHOW_SB)
+        self.history.SetBackgroundColour(wx.Colour(240, 240, 240))  # Cor de fundo para o painel
+        self.history.SetScrollRate(5, 5)
+        self.history_sizer = wx.BoxSizer(wx.VERTICAL)
+        self.history.SetSizer(self.history_sizer)
+        vbox.Add(self.history, proportion=1, flag=wx.EXPAND | wx.ALL, border=5)
+
+        hbox = wx.BoxSizer(wx.HORIZONTAL)
+        self.input_box = wx.TextCtrl(panel, size=(-1, 30))
+        hbox.Add(self.input_box, proportion=1, flag=wx.EXPAND | wx.ALL, border=5)
+
+        send_btn = wx.Button(panel, label="Enviar")
+        send_btn.Bind(wx.EVT_BUTTON, self.send_message)
+        hbox.Add(send_btn, flag=wx.ALL, border=5)
+
+        vbox.Add(hbox, flag=wx.EXPAND)
+        panel.SetSizer(vbox)
+
+        self.Show()
+
+    def add_message(self, message, is_user=True, update_last=False):
+        """Adiciona uma mensagem ao painel de histórico."""
+        if update_last and self.history_sizer.GetChildren():
+            # Atualiza o último painel em vez de criar um novo
+            last_panel = self.history_sizer.GetChildren()[-1].GetWindow()
+            last_text = last_panel.GetChildren()[0]
+            last_text.SetLabel(message)
+            last_text.Wrap(self.GetSize()[0] - 50)
+            self.history.Layout()
+            self.history.Scroll(-1, self.history.GetVirtualSize()[1])
+            return
+
+        message_panel = wx.Panel(self.history, size=(-1, -1))
+        message_sizer = wx.BoxSizer(wx.HORIZONTAL)
+
+        # Estilo e cores diferentes para usuário e IA
+        bg_color = wx.Colour(200, 230, 201) if is_user else wx.Colour(187, 222, 251)
+        text_color = wx.Colour(0, 0, 0)
+
+        message_text = wx.StaticText(message_panel, label=message, style=wx.ALIGN_LEFT)
+        message_text.Wrap(self.GetSize()[0] - 50)  # Ajuste de largura para o texto
+        message_text.SetBackgroundColour(bg_color)
+        message_text.SetForegroundColour(text_color)
+
+        # Adicionar funcionalidade de cópia
+        message_text.Bind(wx.EVT_RIGHT_DOWN, self.copy_message)
+
+        # Ajustar alinhamento baseado no tipo de mensagem
+        if is_user:
+            message_sizer.AddStretchSpacer()
+            message_sizer.Add(message_text, flag=wx.EXPAND | wx.ALL, border=5)
+        else:
+            message_sizer.Add(message_text, flag=wx.EXPAND | wx.ALL, border=5)
+            message_sizer.AddStretchSpacer()
+
+        message_panel.SetSizer(message_sizer)
+        self.history_sizer.Add(message_panel, flag=wx.EXPAND | wx.ALL, border=5)
+        self.history.Layout()
+        self.history.Scroll(-1, self.history.GetVirtualSize()[1])
+
+    def send_message(self, event):
+        user_message = self.input_box.GetValue().strip()
+        if not user_message:
+            return
+
+        # Exibir mensagem do usuário na interface
+        self.add_message(f"Você: {user_message}", is_user=True)
+        self.input_box.Clear()
+
+        # Enviar mensagem para a API em uma thread separada
+        thread = threading.Thread(target=self.handle_ai_response, args=(user_message,))
+        thread.start()
+
+    def handle_ai_response(self, user_message):
+        try:
+            response = self.query_ai(user_message)
+            ai_response = response.get("choices", [{}])[0].get("message", {}).get("content", "Sem resposta.")
+            self.display_dynamic_ai_message(ai_response)
+        except Exception as e:
+            wx.CallAfter(self.add_message, f"Erro: {str(e)}", is_user=False)
+
+    def display_dynamic_ai_message(self, full_message):
+        """Exibe a mensagem da IA gradualmente, simulando o carregamento."""
+        current_message = "IA: "
+        wx.CallAfter(self.add_message, current_message, is_user=False)
+
+        for char in full_message:
+            current_message += char
+            wx.CallAfter(self.add_message, current_message, is_user=False, update_last=True)
+            time.sleep(0.02)  # Simula a geração gradual de texto
+
+    def query_ai(self, message):
+        payload = {
+            "model": MODEL_NAME,
+            "messages": [
+                {"role": "system", "content": "Você é um assistente útil."},
+                {"role": "user", "content": message}
+            ]
+        }
+        headers = {"Content-Type": "application/json"}
+        response = requests.post(API_URL, headers=headers, data=json.dumps(payload))
+        response.raise_for_status()
+        return response.json()
+
+    def copy_message(self, event):
+        """Permite copiar o texto da mensagem clicada com o botão direito."""
+        widget = event.GetEventObject()
+        if isinstance(widget, wx.StaticText):
+            text_to_copy = widget.GetLabel()
+            if wx.TheClipboard.Open():
+                wx.TheClipboard.SetData(wx.TextDataObject(text_to_copy))
+                wx.TheClipboard.Close()
+
+if __name__ == "__main__":
+    app = wx.App(False)
+    frame = ChatApp(None)
+    app.MainLoop()
+
+```

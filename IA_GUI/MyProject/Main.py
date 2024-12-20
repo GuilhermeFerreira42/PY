@@ -1,20 +1,25 @@
-from flask import Flask, render_template
-from YouTubePage import youtube_page
-from OfflineVideoPage import offline_video_page
-from PDFPage import pdf_page
-from ChatHandler import chat_handler
+import wx
+from YouTubePage import YouTubePage
 
-app = Flask(__name__)
+class MainFrame(wx.Frame):
+    def __init__(self):
+        super().__init__(None, title="Resumidor de Vídeos", size=(800, 600))
 
-# Registrando as rotas para cada aba
-app.register_blueprint(youtube_page, url_prefix='/youtube')
-app.register_blueprint(offline_video_page, url_prefix='/offline')
-app.register_blueprint(pdf_page, url_prefix='/pdf')
-app.register_blueprint(chat_handler, url_prefix='/chat')
+        # Criar um notebook para as abas
+        self.notebook = wx.Notebook(self)
 
-@app.route('/')
-def index():
-    return render_template('index.html')  # Página inicial
+        # Adicionar a aba do YouTube
+        self.youtube_page = YouTubePage(self.notebook)
+        self.notebook.AddPage(self.youtube_page, "YouTube")
 
-if __name__ == '__main__':
-    app.run(debug=True)
+        # Configurar o layout principal
+        sizer = wx.BoxSizer(wx.VERTICAL)
+        sizer.Add(self.notebook, 1, wx.EXPAND)
+        self.SetSizer(sizer)
+
+        self.Show()
+
+if __name__ == "__main__":
+    app = wx.App(False)
+    frame = MainFrame()
+    app.MainLoop()
