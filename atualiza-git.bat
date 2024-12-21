@@ -80,9 +80,9 @@ echo 1. Restaurar arquivos deletados
 echo 2. Sincronizar com repositorio
 echo 3. Fazer fetch do repositorio
 echo 4. Fazer merge de branches
-echo 5. Inicializar um novo repositorio (git init)
-echo 6. Desfazer alteracoes (git reset)
-echo 7. Listar branches (git branch)
+echo 5. Inicializar um novo repositorio
+echo 6. Desfazer alteracoes
+echo 7. Listar branches
 echo 8. Voltar ao menu principal
 echo =====================================
 set /p escolha_outras="Escolha uma opcao: "
@@ -124,18 +124,6 @@ goto outras_opcoes
 :init
 echo Inicializando um novo repositorio...
 git init
-pause
-goto outras_opcoes
-
-:reset
-echo Desfazendo alteracoes...
-git reset
-pause
-goto outras_opcoes
-
-:branch
-echo Listando branches...
-git branch
 pause
 goto outras_opcoes
 
