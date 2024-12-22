@@ -82,8 +82,9 @@ echo 3. Fazer fetch do repositorio
 echo 4. Fazer merge de branches
 echo 5. Inicializar um novo repositorio
 echo 6. Desfazer alteracoes
-echo 7. Listar branches
-echo 8. Voltar ao menu principal
+echo 7. Descartar todas as alteracoes
+echo 8. Listar branches
+echo 9. Voltar ao menu principal
 echo =====================================
 set /p escolha_outras="Escolha uma opcao: "
 
@@ -93,8 +94,9 @@ if %escolha_outras%==3 goto fetch
 if %escolha_outras%==4 goto merge
 if %escolha_outras%==5 goto init
 if %escolha_outras%==6 goto reset
-if %escolha_outras%==7 goto branch
-if %escolha_outras%==8 goto menu
+if %escolha_outras%==7 goto descartar
+if %escolha_outras%==8 goto branch
+if %escolha_outras%==9 goto menu
 goto outras_opcoes
 
 :restaurar
@@ -124,6 +126,12 @@ goto outras_opcoes
 :init
 echo Inicializando um novo repositorio...
 git init
+pause
+goto outras_opcoes
+
+:descartar
+echo Descartando todas as alteracoes...
+git checkout .
 pause
 goto outras_opcoes
 
