@@ -1,6 +1,7 @@
 import yt_dlp
 import re
 import os
+import json
 
 class SubtitleProcessor:
     def __init__(self):
@@ -32,7 +33,7 @@ class SubtitleProcessor:
                 print(f"Erro ao baixar legendas: {e}")
                 return None
 
-    def clean_and_consolidate_subtitles(self, subtitle_file):
+    def clean_and_consolidate_subtitles(self, subtitle_file, video_name):
         try:
             with open(subtitle_file, 'r', encoding='utf-8') as file:
                 content = file.read()
@@ -48,12 +49,13 @@ class SubtitleProcessor:
 
             consolidated_text = '\n'.join(unique_lines).strip()
 
-            cleaned_filename = subtitle_file.replace('.vtt', '_consolidated.txt')
-            with open(cleaned_filename, 'w', encoding='utf-8') as file:
-                file.write(consolidated_text)
+            # Salvar as legendas em um arquivo JSON
+            json_filename = f"{video_name}_subtitles.json"
+            with open(json_filename, 'w', encoding='utf-8') as json_file:
+                json.dump({"subtitles": unique_lines}, json_file, ensure_ascii=False, indent=4)
 
-            print(f"Texto consolidado salvo em: {cleaned_filename}")
-            return cleaned_filename
+            print(f"Texto consolidado salvo em: {json_filename}")
+            return json_filename
         except Exception as e:
             print(f"Erro ao limpar e consolidar as legendas: {e}")
             return None
