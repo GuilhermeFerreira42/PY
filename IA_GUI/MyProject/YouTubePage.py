@@ -3,21 +3,20 @@ import json
 import os
 import threading
 from SubtitleProcessor import SubtitleProcessor
+from HistorySidebar import HistorySidebar  # Importa a nova classe
 
 class YouTubePage(wx.Panel):
     def __init__(self, parent):
         super(YouTubePage, self).__init__(parent)
         self.subtitle_processor = SubtitleProcessor()
-        self.history_file = "história do YouTube/histórico.json"
+        self.history_sidebar = HistorySidebar(self)  # Usando a nova classe
         self.InitUI()
-        self.LoadHistory()
 
     def InitUI(self):
         vbox = wx.BoxSizer(wx.HORIZONTAL)
 
-        # Sidebar para o histórico
-        self.sidebar = wx.ListBox(self, style=wx.LB_SINGLE)
-        vbox.Add(self.sidebar, proportion=1, flag=wx.EXPAND | wx.ALL, border=5)
+        # Adiciona a barra lateral ao layout
+        vbox.Add(self.history_sidebar, proportion=1, flag=wx.EXPAND | wx.ALL, border=5)
 
         # Pane para o conteúdo do YouTube
         content_box = wx.BoxSizer(wx.VERTICAL)
@@ -53,7 +52,7 @@ class YouTubePage(wx.Panel):
         left_box.Add(self.copy_button, flag=wx.LEFT | wx.RIGHT, border=5)
 
         self.summarize_button = wx.Button(self, label="Resumir")
-        self.summarize_button.Bind(wx.EVT_BUTTON, self.OnSummarize)
+        self.summarize_button.Bind(wx.EVT_BUTTON, self .OnSummarize)
         left_box.Add(self.summarize_button, flag=wx.LEFT | wx.RIGHT, border=5)
 
         self.progress_bar = wx.Gauge(self, range=100, size=(250, 25))
@@ -64,10 +63,6 @@ class YouTubePage(wx.Panel):
 
         # Caixa de texto para texto processado
         hbox3 = wx.BoxSizer(wx.HORIZONTAL)
-
-            
-        # Adiciona o evento de seleção na barra lateral
-        self.sidebar.Bind(wx.EVT_LISTBOX, self.OnSelectHistory)
 
         # Tela original de texto
         self.text_ctrl = wx.TextCtrl(self, style=wx.TE_MULTILINE | wx.TE_READONLY)
@@ -90,6 +85,17 @@ class YouTubePage(wx.Panel):
         vbox.Add(content_box, proportion=3, flag=wx.EXPAND)
 
         self.SetSizer(vbox)
+
+    def LoadVideo(self, video_url, subtitles_path):
+        """Carrega a URL e as legendas do vídeo selecionado."""
+        self.url_text.SetValue(video_url)
+        if os.path.exists(subtitles_path):
+            with open(subtitles_path, 'r', encoding='utf-8') as subtitle_file:
+                content = subtitle_file.read()
+                self.text_ctrl.SetValue(content)
+                # Contar palavras e atualizar o contador
+                word_count = len(content.split())
+                self.word_count_label.SetLabel(f"Palavras: {word_count}")
 
     def OnPaste(self, event):
         """Cola o conteúdo da área de transferência na URL e limpa o campo antes."""
@@ -114,32 +120,6 @@ class YouTubePage(wx.Panel):
     def OnSummarize(self, event):
         """Evento para resumir o texto (a funcionalidade será implementada depois)."""
         wx.MessageBox("Função de resumo ainda não implementada.", "Informação", wx.ICON_INFORMATION)
-
-        # Exemplo de como contar palavras no texto resumido (após implementar o resumo)
-        summary_content = self.summary_ctrl.GetValue()  # Texto do resumo
-        summary_word_count = len(summary_content.split())
-        self.summary_word_count_label.SetLabel(f"Palavras (Resumo): {summary_word_count}")
-
-    def GetVideoNameFromURL(self, url):
-        """Obtém o nome do vídeo a partir da URL."""
-        # Extrai o nome do vídeo do URL
-        # Exemplo: https://www.youtube.com/watch?v=dQw4w9WgXcQ -> "dQw4w9WgXcQ"
-        return url.split('v=')[-1]
-
-    def AddToHistory(self, video_name):
-        """Adiciona o nome do vídeo à sidebar."""
-        self.sidebar.Append(video_name)
-
-    def LoadHistory(self):
-        """Carrega o histórico de vídeos da pasta 'história do YouTube'."""
-        if not os.path.exists("história do YouTube"):
-            os.makedirs("história do YouTube")
-
-        if os.path.exists(self.history_file):
-            with open(self.history_file, 'r', encoding='utf-8') as file:
-                history = json.load(file)
-                for video_name in history:
-                    self.AddToHistory(video_name)
 
     def OnProcess(self, event):
         """Inicia o processamento do vídeo e atualiza o histórico na sidebar."""
@@ -167,8 +147,8 @@ class YouTubePage(wx.Panel):
                     wx.CallAfter(self.word_count_label.SetLabel, f"Palavras: {word_count}")
 
                     # Adicionar o nome do vídeo à sidebar e salvar o histórico
-                    wx.CallAfter(self.AddToHistory, video_name)
-                    self.SaveHistory(video_name)
+                    wx.CallAfter(self.history_sidebar.Append, video_name)
+                    self.SaveHistory(video_name, video_url, consolidated_file)
                 else:
                     wx.CallAfter(wx.MessageBox, "Erro ao consolidar as legendas.", "Erro", wx.ICON_ERROR)
             else:
@@ -198,8 +178,8 @@ class YouTubePage(wx.Panel):
             os.makedirs("história do YouTube")
 
         history = []
-        if os.path.exists(self.history_file):
-            with open(self.history_file, 'r', encoding='utf-8') as file:
+        if os.path.exists(self.history_sidebar.history_file):
+            with open(self.history_sidebar.history_file, 'r', encoding='utf-8') as file:
                 history = json.load(file)
 
         # Adiciona o vídeo ao histórico
@@ -209,28 +189,9 @@ class YouTubePage(wx.Panel):
             "subtitles": subtitles_path
         })
 
-        with open(self.history_file, 'w', encoding='utf-8') as file:
+        with open(self.history_sidebar.history_file, 'w', encoding='utf-8') as file:
             json.dump(history, file, ensure_ascii=False, indent=4)
 
-    def OnSelectHistory(self, event):
-        """Carrega as informações do vídeo selecionado na barra lateral."""
-        selection = self.sidebar.GetSelection()
-        if selection != wx.NOT_FOUND:
-            video_info = self.sidebar.GetString(selection)
-            print(f"Selecionado: {video_info}")  # Adicione esta linha para depuração
-            self.LoadVideoInfo(video_info)
-
-    def LoadVideoInfo(self, video_name):
-        """Carrega as informações do vídeo selecionado."""
-        if os.path.exists(self.history_file):
-            with open(self.history_file, 'r', encoding='utf-8') as file:
-                history = json.load(file)
-                for video in history:
-                    print(f"Verificando: {video['name']}")  # Adicione esta linha para depuração
-                    if video['name'] == video_name:
-                        self.url_text.SetValue(video['url'])
-                        if os.path.exists(video['subtitles']):
-                            with open(video['subtitles'], 'r', encoding='utf-8') as subtitle_file:
-                                content = subtitle_file.read()
-                                self.text_ctrl.SetValue(content)
-                        break
+    def GetVideoNameFromURL(self, url):
+        """Obtém o nome do vídeo a partir da URL."""
+        return url.split('v=')[-1]
