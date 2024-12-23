@@ -52,7 +52,7 @@ class YouTubePage(wx.Panel):
         left_box.Add(self.copy_button, flag=wx.LEFT | wx.RIGHT, border=5)
 
         self.summarize_button = wx.Button(self, label="Resumir")
-        self.summarize_button.Bind(wx.EVT_BUTTON, self .OnSummarize)
+        self.summarize_button.Bind(wx.EVT_BUTTON, self.OnSummarize)
         left_box.Add(self.summarize_button, flag=wx.LEFT | wx.RIGHT, border=5)
 
         self.progress_bar = wx.Gauge(self, range=100, size=(250, 25))
@@ -76,7 +76,7 @@ class YouTubePage(wx.Panel):
 
         # Contador de palavras para o texto original
         self.word_count_label = wx.StaticText(self, label="Palavras: 0")
-        content_box.Add(self.word_count_label, flag=wx.ALIGN_RIGHT | wx.RIGHT | wx.BOTTOM, border=10)
+        content_box.Add (self.word_count_label, flag=wx.ALIGN_RIGHT | wx.RIGHT | wx.BOTTOM, border=10)
 
         # Contador de palavras para o resumo
         self.summary_word_count_label = wx.StaticText(self, label="Palavras (Resumo): 0")
@@ -121,42 +121,6 @@ class YouTubePage(wx.Panel):
         """Evento para resumir o texto (a funcionalidade será implementada depois)."""
         wx.MessageBox("Função de resumo ainda não implementada.", "Informação", wx.ICON_INFORMATION)
 
-    def OnProcess(self, event):
-        """Inicia o processamento do vídeo e atualiza o histórico na sidebar."""
-        video_url = self.url_text.GetValue()
-        if not video_url:
-            wx.MessageBox("Por favor, insira uma URL do vídeo.", "Erro", wx.ICON_ERROR)
-            return
-
-        self.progress_bar.SetValue(10)  # Atualiza a barra de progresso
-
-        def run():
-            subtitle_file = self.subtitle_processor.download_subtitles(video_url)
-            if subtitle_file:
-                self.progress_bar.SetValue(70)
-                video_name = self.GetVideoNameFromURL(video_url)
-                consolidated_file = self.subtitle_processor.clean_and_consolidate_subtitles(subtitle_file, video_name)
-                self.progress_bar.SetValue(100)
-                if consolidated_file:
-                    with open(consolidated_file, 'r', encoding='utf-8') as file:
-                        content = file.read()
-                    wx.CallAfter(self.text_ctrl.SetValue, content)
-
-                    # Contar palavras e atualizar o contador
-                    word_count = len(content.split())
-                    wx.CallAfter(self.word_count_label.SetLabel, f"Palavras: {word_count}")
-
-                    # Adicionar o nome do vídeo à sidebar e salvar o histórico
-                    wx.CallAfter(self.history_sidebar.Append, video_name)
-                    self.SaveHistory(video_name, video_url, consolidated_file)
-                else:
-                    wx.CallAfter(wx.MessageBox, "Erro ao consolidar as legendas.", "Erro", wx.ICON_ERROR)
-            else:
-                wx.CallAfter(wx.MessageBox, "Não foi possível obter as legendas.", "Erro", wx.ICON_ERROR)
-
-        thread = threading.Thread(target=run)
-        thread.start()
-
     def OnClear(self, event):
         """Limpa todos os campos e remove os arquivos de legendas armazenados."""
         self.url_text.SetValue("")
@@ -172,6 +136,10 @@ class YouTubePage(wx.Panel):
 
         wx.MessageBox("Arquivos de legendas limpos.", "Informação", wx.ICON_INFORMATION)
 
+    def GetVideoNameFromURL(self, url):
+        """Obtém o nome do vídeo a partir da URL."""
+        return url.split('v=')[-1]
+
     def SaveHistory(self, video_name, video_url, subtitles_path):
         """Salva o nome do vídeo, URL e caminho das legendas no histórico."""
         if not os.path.exists("história do YouTube"):
@@ -184,14 +152,50 @@ class YouTubePage(wx.Panel):
 
         # Adiciona o vídeo ao histórico
         history.append({
-            "name": video_name,
+            "name": video_name,  # Aqui você já está usando o nome do vídeo
             "url": video_url,
             "subtitles": subtitles_path
         })
 
         with open(self.history_sidebar.history_file, 'w', encoding='utf-8') as file:
             json.dump(history, file, ensure_ascii=False, indent=4)
+        
 
-    def GetVideoNameFromURL(self, url):
-        """Obtém o nome do vídeo a partir da URL."""
-        return url.split('v=')[-1]
+    def OnProcess(self, event):
+        """Inicia o processamento do vídeo e atualiza o histórico na sidebar."""
+        video_url = self.url_text.GetValue()
+        if not video_url:
+            wx.MessageBox("Por favor, insira uma URL do vídeo.", "Erro", wx.ICON_ERROR)
+            return
+
+        self.progress_bar.SetValue(10)  # Atualiza a barra de progresso
+
+        def run():
+            subtitle_file = self.subtitle_processor.download_subtitles(video_url)
+            if subtitle_file:
+                self.progress_bar.SetValue(70)
+                # Extraindo o nome do vídeo sem a parte entre colchetes
+                video_name = os.path.basename(subtitle_file).replace('.pt.vtt', '')  # Remove a extensão
+                video_name = video_name.split('[')[0].strip()  # Remove a parte entre colchetes e espaços em branco
+                consolidated_file = self.subtitle_processor.clean_and_consolidate_subtitles(subtitle_file, video_name)
+                self.progress_bar.SetValue(100)
+                if consolidated_file:
+                    with open(consolidated_file, 'r', encoding='utf-8') as file:
+                        content = file.read()
+                    wx.CallAfter(self.text_ctrl.SetValue, content)
+
+                    # Contar palavras e atualizar o contador
+                    word_count = len(content.split())
+                    wx.CallAfter(self.word_count_label.SetLabel, f"Palavras: {word_count}")
+
+                    # Adicionar o nome do vídeo à sidebar e salvar o histórico
+                    wx.CallAfter(self.history_sidebar.Append, video_name)  # Atualiza a barra lateral
+                    self.SaveHistory(video_name, video_url, consolidated_file)  # Salva o histórico
+
+                else:
+                    wx.CallAfter(wx.MessageBox, "Erro ao consolidar as legendas.", "Erro", wx.ICON_ERROR)
+            else:
+                wx.CallAfter(wx.MessageBox, "Não foi possível obter as legendas.", "Erro", wx.ICON_ERROR)
+
+        thread = threading.Thread(target=run)
+        thread.start()
