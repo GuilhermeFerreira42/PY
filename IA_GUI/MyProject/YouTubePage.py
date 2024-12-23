@@ -10,10 +10,17 @@ class YouTubePage(wx.Panel):
         super(YouTubePage, self).__init__(parent)
         self.subtitle_processor = SubtitleProcessor()
         self.history_sidebar = HistorySidebar(self)  # Usando a nova classe
+        self.is_sidebar_visible = True  # Estado da barra lateral
         self.InitUI()
 
     def InitUI(self):
         vbox = wx.BoxSizer(wx.HORIZONTAL)
+
+        # Botão discreto para expandir/colapsar a barra lateral (hamburger menu)
+        self.toggle_button = wx.Button(self, label="☰")  # Usando um ícone de menu
+        self.toggle_button.Bind(wx.EVT_BUTTON, self.OnToggleSidebar)
+        self.toggle_button.SetSize((40, 40))  # Tamanho do botão
+        vbox.Add(self.toggle_button, flag=wx.ALL, border=5)
 
         # Adiciona a barra lateral ao layout
         vbox.Add(self.history_sidebar, proportion=1, flag=wx.EXPAND | wx.ALL, border=5)
@@ -76,7 +83,7 @@ class YouTubePage(wx.Panel):
 
         # Contador de palavras para o texto original
         self.word_count_label = wx.StaticText(self, label="Palavras: 0")
-        content_box.Add (self.word_count_label, flag=wx.ALIGN_RIGHT | wx.RIGHT | wx.BOTTOM, border=10)
+        content_box.Add(self.word_count_label, flag=wx.ALIGN_RIGHT | wx.RIGHT | wx.BOTTOM, border=10)
 
         # Contador de palavras para o resumo
         self.summary_word_count_label = wx.StaticText(self, label="Palavras (Resumo): 0")
@@ -85,6 +92,17 @@ class YouTubePage(wx.Panel):
         vbox.Add(content_box, proportion=3, flag=wx.EXPAND)
 
         self.SetSizer(vbox)
+
+    def OnToggleSidebar(self, event):
+        """Alterna a visibilidade da barra lateral."""
+        if self.is_sidebar_visible:
+            self.history_sidebar.Hide()  # Esconde a barra lateral
+            self.toggle_button.SetLabel("☰")  # Mantém o ícone do botão
+        else:
+            self.history_sidebar.Show()  # Mostra a barra lateral
+            self.toggle_button.SetLabel("☰")  # Mantém o ícone do botão
+        self.is_sidebar_visible = not self.is_sidebar_visible  # Alterna o estado
+        self.Layout()  # Atualiza o layout
 
     def LoadVideo(self, video_url, subtitles_path):
         """Carrega a URL e as legendas do vídeo selecionado."""
