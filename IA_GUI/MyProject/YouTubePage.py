@@ -4,13 +4,15 @@ import os
 import threading
 from SubtitleProcessor import SubtitleProcessor
 from HistorySidebar import HistorySidebar  # Importa a nova classe
+from ChatIA import ChatIA
 
 class YouTubePage(wx.Panel):
     def __init__(self, parent):
         super(YouTubePage, self).__init__(parent)
         self.subtitle_processor = SubtitleProcessor()
-        self.history_sidebar = HistorySidebar(self)  # Usando a nova classe
-        self.is_sidebar_visible = True  # Estado da barra lateral
+        self.history_sidebar = HistorySidebar(self)
+        self.chat_ia = ChatIA()  # Instanciar a classe ChatIA
+        self.is_sidebar_visible = True
         self.InitUI()
 
     def InitUI(self):
@@ -136,8 +138,28 @@ class YouTubePage(wx.Panel):
             wx.MessageBox("Nada para copiar.", "Erro", wx.ICON_ERROR)
 
     def OnSummarize(self, event):
-        """Evento para resumir o texto (a funcionalidade será implementada depois)."""
-        wx.MessageBox("Função de resumo ainda não implementada.", "Informação", wx.ICON_INFORMATION)
+        """Evento para resumir o texto."""
+        original_text = self.text_ctrl.GetValue()
+        if not original_text:
+            wx.MessageBox("Não há texto para resumir.", "Erro", wx.ICON_ERROR)
+            return
+
+        try:
+            # Gerar o resumo usando a classe ChatIA
+            summary = self.chat_ia.generate_summary(original_text)
+            self.summary_ctrl.SetValue(summary)  # Exibir o resumo na caixa de texto de resumo
+
+            # Salvar o resumo no JSON
+            video_name = self.GetVideoNameFromURL(self.url_text.GetValue())
+            video_url = self.url_text.GetValue()  # Obtenha a URL do vídeo
+            subtitles_path = "caminho/para/as/legendas"  # Substitua pelo caminho correto das legendas
+
+            # Chame o método save_summary com todos os parâmetros necessários
+            self.chat_ia.save_summary(video_name, video_url, subtitles_path, summary)
+
+            wx.MessageBox("Resumo gerado e salvo com sucesso!", "Sucesso", wx.ICON_INFORMATION)
+        except Exception as e:
+            wx.MessageBox(f"Erro ao gerar resumo: {str(e)}", "Erro", wx.ICON_ERROR)
 
     def OnClear(self, event):
         """Limpa todos os campos e remove os arquivos de legendas armazenados."""
