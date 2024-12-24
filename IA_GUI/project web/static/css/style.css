@@ -1,0 +1,36 @@
+/* Main styles */
+body {
+    background-color: #f8f9fa;
+}
+
+.card {
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+textarea {
+    resize: vertical;
+    min-height: 200px;
+}
+
+/* Progress bar */
+.progress {
+    height: 20px;
+}
+
+/* History sidebar */
+#history-sidebar .card {
+    height: calc(100vh - 100px);
+    overflow-y: auto;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    #history-sidebar {
+        margin-bottom: 20px;
+    }
+    
+    #history-sidebar .card {
+        height: auto;
+        max-height: 300px;
+    }
+}

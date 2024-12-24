@@ -1,0 +1,12 @@
+{
+  "name": "youtube-subtitles",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "python app.py"
+  },
+  "dependencies": {
+    "yt-dlp": "^2023.11.16"
+  }
+}
