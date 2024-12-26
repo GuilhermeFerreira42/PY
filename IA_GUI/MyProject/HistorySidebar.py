@@ -16,6 +16,11 @@ class HistorySidebar(wx.ListBox):
         if not os.path.exists("história do YouTube"):
             os.makedirs("história do YouTube")
 
+        # Cria o arquivo JSON se não existir
+        if not os.path.exists(self.history_file):
+            with open(self.history_file, 'w', encoding='utf-8') as file:
+                json.dump([], file)  # Inicializa com uma lista vazia
+
         if os.path.exists(self.history_file):
             with open(self.history_file, 'r', encoding='utf-8') as file:
                 history = json.load(file)
@@ -50,32 +55,3 @@ class HistorySidebar(wx.ListBox):
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info_dict = ydl.extract_info(url, download=False)
             return info_dict.get('title', None)
-
-    def SaveHistory(self, video_name, video_url, subtitles_path, summary):
-        """Salva o nome do vídeo, URL, caminho das legendas e resumo no histórico."""
-        if not os.path.exists("história do YouTube"):
-            os.makedirs("história do YouTube")
-
-        history = []
-        if os.path.exists(self.history_sidebar.history_file):
-            with open(self.history_sidebar.history_file, 'r', encoding='utf-8') as file:
-                history = json.load(file)
-
-        # Adiciona ou atualiza o vídeo no histórico
-        for video in history:
-            if video['name'] == video_name:
-                video['url'] = video_url  # Atualiza a URL
-                video['subtitles'] = subtitles_path  # Atualiza o caminho das legendas
-                video['summary'] = summary  # Adiciona ou atualiza o resumo
-                break
-        else:
-            # Se o vídeo não estiver no histórico, adiciona uma nova entrada
-            history.append({
-                "name": video_name,
-                "url": video_url,
-                "subtitles": subtitles_path,
-                "summary": summary  # Adiciona o resumo
-            })
-
-        with open(self.history_sidebar.history_file, 'w', encoding='utf-8') as file:
-            json.dump(history, file, ensure_ascii=False, indent=4)

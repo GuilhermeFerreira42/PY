@@ -1,7 +1,47 @@
 import requests
 import json
-from VideoHistory import VideoHistory  # Certifique-se de que a classe VideoHistory está importada corretamente
+import os
 
+class VideoHistory:
+    def __init__(self, history_file="história do YouTube/histórico.json"):
+        self.history_file = history_file
+        if not os.path.exists("história do YouTube"):
+            os.makedirs("história do YouTube")
+
+    def load_history(self):
+        """Carrega o histórico de vídeos do arquivo JSON."""
+        if os.path.exists(self.history_file):
+            with open(self.history_file, 'r', encoding='utf-8') as file:
+                return json.load(file)
+        return []
+
+    def save_history(self, video_name, video_url, subtitles_path, summary=None, transcription=None):
+        """Salva ou atualiza as informações do vídeo no arquivo JSON."""
+        history = self.load_history()
+
+        # Atualiza ou adiciona o vídeo no histórico
+        for video in history:
+            if video['name'] == video_name:
+                video['url'] = video_url  # Atualiza a URL
+                video['subtitles'] = subtitles_path  # Atualiza o caminho das legendas
+                if summary:
+                    video['summary'] = summary  # Adiciona ou atualiza o resumo
+                if transcription:
+                    video['transcription'] = transcription  # Adiciona ou atualiza a transcrição
+                break
+        else:
+            # Se o vídeo não estiver no histórico, adiciona uma nova entrada
+            history.append({
+                "name": video_name,
+                "url": video_url,
+                "subtitles": subtitles_path,
+                "summary": summary,  # Adiciona o resumo se fornecido
+                "transcription": transcription  # Adiciona a transcrição se fornecida
+            })
+
+        with open(self.history_file, 'w', encoding='utf-8') as file:
+            json.dump(history, file, ensure_ascii=False, indent=4)
+            
 class ChatIA:
     def __init__(self):
         self.api_url = "http://localhost:11434/v1/chat/completions"
@@ -44,3 +84,5 @@ class ChatIA:
             if video['name'] == video_name:
                 return video  # Retorna todas as informações do vídeo
         return None
+
+# O restante do código permanece inalterado

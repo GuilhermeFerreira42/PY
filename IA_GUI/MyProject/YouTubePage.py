@@ -137,30 +137,6 @@ class YouTubePage(wx.Panel):
         else:
             wx.MessageBox("Nada para copiar.", "Erro", wx.ICON_ERROR)
 
-    def OnSummarize(self, event):
-        """Evento para resumir o texto."""
-        original_text = self.text_ctrl.GetValue()
-        if not original_text:
-            wx.MessageBox("Não há texto para resumir.", "Erro", wx.ICON_ERROR)
-            return
-
-        try:
-            # Gerar o resumo usando a classe ChatIA
-            summary = self.chat_ia.generate_summary(original_text)
-            self.summary_ctrl.SetValue(summary)  # Exibir o resumo na caixa de texto de resumo
-
-            # Salvar o resumo no JSON
-            video_name = self.GetVideoNameFromURL(self.url_text.GetValue())
-            video_url = self.url_text.GetValue()  # Obtenha a URL do vídeo
-            subtitles_path = "caminho/para/as/legendas"  # Substitua pelo caminho correto das legendas
-
-            # Chame o método save_summary com todos os parâmetros necessários
-            self.chat_ia.save_summary(video_name, video_url, subtitles_path, summary)
-
-            wx.MessageBox("Resumo gerado e salvo com sucesso!", "Sucesso", wx.ICON_INFORMATION)
-        except Exception as e:
-            wx.MessageBox(f"Erro ao gerar resumo: {str(e)}", "Erro", wx.ICON_ERROR)
-
     def OnClear(self, event):
         """Limpa todos os campos e remove os arquivos de legendas armazenados."""
         self.url_text.SetValue("")
@@ -180,26 +156,33 @@ class YouTubePage(wx.Panel):
         """Obtém o nome do vídeo a partir da URL."""
         return url.split('v=')[-1]
 
-    def SaveHistory(self, video_name, video_url, subtitles_path):
-        """Salva o nome do vídeo, URL e caminho das legendas no histórico."""
-        if not os.path.exists("história do YouTube"):
-            os.makedirs("história do YouTube")
+    def OnSummarize(self, event):
+        """Evento para resumir o texto."""
+        original_text = self.text_ctrl.GetValue()
+        if not original_text:
+            wx.MessageBox("Não há texto para resumir.", "Erro", wx.ICON_ERROR)
+            return
 
-        history = []
-        if os.path.exists(self.history_sidebar.history_file):
-            with open(self.history_sidebar.history_file, 'r', encoding='utf-8') as file:
-                history = json.load(file)
+        try:
+            # Gerar o resumo usando a classe ChatIA
+            summary = self.chat_ia.generate_summary(original_text)
+            self.summary_ctrl.SetValue(summary)  # Exibir o resumo na caixa de texto de resumo
 
-        # Adiciona o vídeo ao histórico
-        history.append({
-            "name": video_name,  # Aqui você já está usando o nome do vídeo
-            "url": video_url,
-            "subtitles": subtitles_path
-        })
+            # Obter informações do vídeo
+            video_name = self.GetVideoNameFromURL(self.url_text.GetValue())
+            video_url = self.url_text.GetValue()  # Obtenha a URL do vídeo
+            subtitles_path = "caminho/para/as/legendas"  # Substitua pelo caminho correto das legendas
 
-        with open(self.history_sidebar.history_file, 'w', encoding='utf-8') as file:
-            json.dump(history, file, ensure_ascii=False, indent=4)
-        
+            # Chame o método save_summary com todos os parâmetros necessários
+            self.chat_ia.save_summary(video_name, video_url, subtitles_path, summary)
+
+            # Adiciona o vídeo à lista
+            self.history_sidebar.Append(video_name)  
+
+
+            wx.MessageBox("Resumo gerado e salvo com sucesso!", "Sucesso", wx.ICON_INFORMATION)
+        except Exception as e:
+            wx.MessageBox(f"Erro ao gerar resumo: {str(e)}", "Erro", wx.ICON_ERROR)
 
     def OnProcess(self, event):
         """Inicia o processamento do vídeo e atualiza o histórico na sidebar."""
@@ -214,7 +197,6 @@ class YouTubePage(wx.Panel):
             subtitle_file = self.subtitle_processor.download_subtitles(video_url)
             if subtitle_file:
                 self.progress_bar.SetValue(70)
-                # Extraindo o nome do vídeo sem a parte entre colchetes
                 video_name = os.path.basename(subtitle_file).replace('.pt.vtt', '')  # Remove a extensão
                 video_name = video_name.split('[')[0].strip()  # Remove a parte entre colchetes e espaços em branco
                 consolidated_file = self.subtitle_processor.clean_and_consolidate_subtitles(subtitle_file, video_name)
@@ -228,9 +210,11 @@ class YouTubePage(wx.Panel):
                     word_count = len(content.split())
                     wx.CallAfter(self.word_count_label.SetLabel, f"Palavras: {word_count}")
 
-                    # Adicionar o nome do vídeo à sidebar e salvar o histórico
-                    wx.CallAfter(self.history_sidebar.Append, video_name)  # Atualiza a barra lateral
-                    self.SaveHistory(video_name, video_url, consolidated_file)  # Salva o histórico
+                    # Salvar o histórico usando a nova função
+                    wx.CallAfter(self.chat_ia.save_summary, video_name, video_url, consolidated_file, None)  # Passar None para o resumo por enquanto
+
+                    # Adiciona o vídeo à lista da HistorySidebar
+                    wx.CallAfter(self.history_sidebar.Append, video_name)
 
                 else:
                     wx.CallAfter(wx.MessageBox, "Erro ao consolidar as legendas.", "Erro", wx.ICON_ERROR)
