@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Resumidor de Vídeos</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <div class="sidebar" id="sidebar">
+            <button id="toggleSidebar">☰</button>
+            <div class="history-list">
+                <h3>Histórico</h3>
+                <ul id="historyList">
+                    {% for video in history %}
+                        <li data-url="{{ video.url }}" data-subtitles="{{ video.subtitles }}">
+                            {{ video.name }}
+                        </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <div class="url-section">
+                <label for="videoUrl">URL do Vídeo:</label>
+                <input type="text" id="videoUrl" name="videoUrl">
+                <button id="pasteButton">Colar</button>
+            </div>
+
+            <div class="button-section">
+                <button id="processButton">Processar</button>
+                <button id="clearButton">Limpar</button>
+                <button id="copyButton">Copiar</button>
+                <div class="summarize-container">
+                    <button id="summarizeButton">Resumir</button>
+                    <div id="summarizeLoader" class="summarize-loader hidden"></div>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress" id="progressBar"></div>
+                </div>
+            </div>
+
+            <div class="text-section">
+                <div class="text-container">
+                    <textarea id="processedText" readonly></textarea>
+                    <div class="word-count">Palavras: <span id="wordCount">0</span></div>
+                </div>
+                <div class="text-container">
+                    <textarea id="summaryText" readonly></textarea>
+                    <div class="word-count">Palavras (Resumo): <span id="summaryWordCount">0</span></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
