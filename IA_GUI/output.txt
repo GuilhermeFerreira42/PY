@@ -1,0 +1,4008 @@
+
+=== ## ia chat.txt ===
+## ia chat
+Estamos discutindo um projeto e organizando as ideias. Estamos criando um programa resumidor com Yan, que será semelhante a um navegador com várias abas. A primeira aba resumirá vídeos do YouTube que inserirmos, trazendo a transcrição e a opção de resumir. A segunda aba resumirá vídeos offline que já temos no computador. A terceira aba será um resumidor de PDF, com um chat para resumir ou fazer perguntas sobre o arquivo. Todas as abas terão um chat. O programa usará inteligência artificial da Meta. Já tenho parte do código funcionando e um protótipo em wxPython. Precisamos organizar as ideias para começar a implementar o programa com os requisitos mencionados. 
+
+Para organizar as ideias, podemos estruturar o projeto em etapas claras e definir os requisitos de cada aba. Esta é uma proposta inicial: 
+
+Estrutura do Programa 
+Interface Principal (wxPython) com múltiplas abas, cada uma com funcionalidades específicas. Um layout intuitivo e responsivo para facilitar a navegação, além de um chat integrado em todas as abas. 
+
+Funcionalidades por Aba 
+Para a aba de resumir vídeos do YouTube, haverá um campo para inserir o link do vídeo. O sistema fará o download automático das legendas e exibirá a transcrição, com um botão para resumir a transcrição com a IA e chat para interagir. A aba de vídeos offline permitirá carregar arquivos de vídeo do computador, extraindo áudio e fazendo a transcrição, que também poderá ser resumida com a IA. Na aba de PDFs, será possível carregar arquivos, visualizar o conteúdo, gerar um resumo com a IA e fazer perguntas ou refinar o resumo através do chat. 
+
+O programa terá inteligência artificial integrada ao modelo da Meta para processar e resumir textos, com chat similar ao GPT em todas as abas. A estrutura do código será modular, com a interface e cada aba separadamente. Um módulo específico será designado para cada função. 
+
+Os próximos passos incluem definir o layout da interface, finalizar os requisitos e as entradas/saídas para cada aba, estruturar os módulos para processar os dados, integrar a IA da Meta para o chat e os resumos, e testar a interação entre as abas e a IA. 
+
+Vamos fazer em orientado objeto e dividir em fases. Monte para mim apenas o front-end do programa em wxPython. E monte uma árvore binária dos arquivos main do programa. Explique a lógica que vamos abordar. Explique para mim onde ficará mais ou menos cada função, como vamos dividir. Se vamos programar cada aba para alguma coisa ou se vamos dividir, tem funções. Cada página de código executa uma função e assim por diante. 
+
+Adotaremos uma abordagem orientada a objetos e dividiremos o programa em classes para cada aba. A janela principal (MainFrame) gerenciará as abas, que serão instâncias de classes separadas. 
+
+Árvore binária dos arquivos principais do programa: 
+Main. py 
+├── YouTubePage. py 
+├── OfflineVideoPage. py 
+├── PDFPage. py 
+├── ChatHandler. py 
+├── Utils/ 
+│ ├── YouTubeUtils. py 
+│ ├── VideoUtils. py 
+│ ├── PDFUtils. py 
+│ ├── AIUtils. py 
+└── Assets/ 
+├── Icons/ 
+├── Themes/ 
+
+A janela principal é responsável por criá-la e gerenciar as abas. Cada aba terá suas próprias funções de front-end com chamadas a funções nos arquivos da pasta Utils. As funções do chat estarão centralizadas em ChatHandler. py. 
+
+O programa será modular, onde cada aba trata apenas da interface e chamadas a funções, deixando o processamento para as funções utilitárias. Quando uma nova aba for adicionada, bastará criar uma nova classe e módulo utilitário correspondente. 
+
+Em relação ao código do front-end em wxPython, a estrutura inicial inclui a criação da janela principal e as abas para vídeos do YouTube, vídeos offline e PDFs, cada uma com um layout básico de botões e campos de input. 
+
+Nos próximos passos, precisamos dividir o código em arquivos separados, criar módulos utilitários e integrar a lógica do chat nas abas. Também é essencial testar o protótipo com dados reais e ajustar a interface.
+
+
+vamos começar pela aba do youtube 
+esse é o código que eu já tenho funcionando
+
+
+
+import wx
+import requests
+import json
+import threading
+import time
+
+# Configuração da API
+API_URL = "http://localhost:11434/v1/chat/completions"
+MODEL_NAME = "gemma2:2b"  # Alterado para o modelo correto
+
+class ChatApp(wx.Frame):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # Configurar a interface
+        self.SetTitle("Chat com IA")
+        self.SetSize((600, 400))
+        panel = wx.Panel(self)
+
+        vbox = wx.BoxSizer(wx.VERTICAL)
+
+        # Substituir painel simples por ScrolledWindow
+        self.history = wx.ScrolledWindow(panel, size=(-1, 300), style=wx.VSCROLL | wx.ALWAYS_SHOW_SB)
+        self.history.SetBackgroundColour(wx.Colour(240, 240, 240))  # Cor de fundo para o painel
+        self.history.SetScrollRate(5, 5)
+        self.history_sizer = wx.BoxSizer(wx.VERTICAL)
+        self.history.SetSizer(self.history_sizer)
+        vbox.Add(self.history, proportion=1, flag=wx.EXPAND | wx.ALL, border=5)
+
+        hbox = wx.BoxSizer(wx.HORIZONTAL)
+        self.input_box = wx.TextCtrl(panel, size=(-1, 30))
+        hbox.Add(self.input_box, proportion=1, flag=wx.EXPAND | wx.ALL, border=5)
+
+        send_btn = wx.Button(panel, label="Enviar")
+        send_btn.Bind(wx.EVT_BUTTON, self.send_message)
+        hbox.Add(send_btn, flag=wx.ALL, border=5)
+
+        vbox.Add(hbox, flag=wx.EXPAND)
+        panel.SetSizer(vbox)
+
+        self.Show()
+
+    def add_message(self, message, is_user=True, update_last=False):
+        """Adiciona uma mensagem ao painel de histórico."""
+        if update_last and self.history_sizer.GetChildren():
+            # Atualiza o último painel em vez de criar um novo
+            last_panel = self.history_sizer.GetChildren()[-1].GetWindow()
+            last_text = last_panel.GetChildren()[0]
+            last_text.SetLabel(message)
+            last_text.Wrap(self.GetSize()[0] - 50)
+            self.history.Layout()
+            self.history.Scroll(-1, self.history.GetVirtualSize()[1])
+            return
+
+        message_panel = wx.Panel(self.history, size=(-1, -1))
+        message_sizer = wx.BoxSizer(wx.HORIZONTAL)
+
+        # Estilo e cores diferentes para usuário e IA
+        bg_color = wx.Colour(200, 230, 201) if is_user else wx.Colour(187, 222, 251)
+        text_color = wx.Colour(0, 0, 0)
+
+        message_text = wx.StaticText(message_panel, label=message, style=wx.ALIGN_LEFT)
+        message_text.Wrap(self.GetSize()[0] - 50)  # Ajuste de largura para o texto
+        message_text.SetBackgroundColour(bg_color)
+        message_text.SetForegroundColour(text_color)
+
+        # Adicionar funcionalidade de cópia
+        message_text.Bind(wx.EVT_RIGHT_DOWN, self.copy_message)
+
+        # Ajustar alinhamento baseado no tipo de mensagem
+        if is_user:
+            message_sizer.AddStretchSpacer()
+            message_sizer.Add(message_text, flag=wx.EXPAND | wx.ALL, border=5)
+        else:
+            message_sizer.Add(message_text, flag=wx.EXPAND | wx.ALL, border=5)
+            message_sizer.AddStretchSpacer()
+
+        message_panel.SetSizer(message_sizer)
+        self.history_sizer.Add(message_panel, flag=wx.EXPAND | wx.ALL, border=5)
+        self.history.Layout()
+        self.history.Scroll(-1, self.history.GetVirtualSize()[1])
+
+    def send_message(self, event):
+        user_message = self.input_box.GetValue().strip()
+        if not user_message:
+            return
+
+        # Exibir mensagem do usuário na interface
+        self.add_message(f"Você: {user_message}", is_user=True)
+        self.input_box.Clear()
+
+        # Enviar mensagem para a API em uma thread separada
+        thread = threading.Thread(target=self.handle_ai_response, args=(user_message,))
+        thread.start()
+
+    def handle_ai_response(self, user_message):
+        try:
+            response = self.query_ai(user_message)
+            ai_response = response.get("choices", [{}])[0].get("message", {}).get("content", "Sem resposta.")
+            self.display_dynamic_ai_message(ai_response)
+        except Exception as e:
+            wx.CallAfter(self.add_message, f"Erro: {str(e)}", is_user=False)
+
+    def display_dynamic_ai_message(self, full_message):
+        """Exibe a mensagem da IA gradualmente, simulando o carregamento."""
+        current_message = "IA: "
+        wx.CallAfter(self.add_message, current_message, is_user=False)
+
+        for char in full_message:
+            current_message += char
+            wx.CallAfter(self.add_message, current_message, is_user=False, update_last=True)
+            time.sleep(0.02)  # Simula a geração gradual de texto
+
+    def query_ai(self, message):
+        payload = {
+            "model": MODEL_NAME,
+            "messages": [
+                {"role": "system", "content": "Você é um assistente útil."},
+                {"role": "user", "content": message}
+            ]
+        }
+        headers = {"Content-Type": "application/json"}
+        response = requests.post(API_URL, headers=headers, data=json.dumps(payload))
+        response.raise_for_status()
+        return response.json()
+
+    def copy_message(self, event):
+        """Permite copiar o texto da mensagem clicada com o botão direito."""
+        widget = event.GetEventObject()
+        if isinstance(widget, wx.StaticText):
+            text_to_copy = widget.GetLabel()
+            if wx.TheClipboard.Open():
+                wx.TheClipboard.SetData(wx.TextDataObject(text_to_copy))
+                wx.TheClipboard.Close()
+
+if __name__ == "__main__":
+    app = wx.App(False)
+    frame = ChatApp(None)
+    app.MainLoop()
+
+e tenho esse código do chat que conversa com a IA
+
+import wx
+import requests
+import json
+import threading
+import time
+
+# Configuração da API
+API_URL = "http://localhost:11434/v1/chat/completions"
+MODEL_NAME = "gemma2:2b"  # Alterado para o modelo correto
+
+class ChatApp(wx.Frame):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # Configurar a interface
+        self.SetTitle("Chat com IA")
+        self.SetSize((600, 400))
+        panel = wx.Panel(self)
+
+        vbox = wx.BoxSizer(wx.VERTICAL)
+
+        # Substituir painel simples por ScrolledWindow
+        self.history = wx.ScrolledWindow(panel, size=(-1, 300), style=wx.VSCROLL | wx.ALWAYS_SHOW_SB)
+        self.history.SetBackgroundColour(wx.Colour(240, 240, 240))  # Cor de fundo para o painel
+        self.history.SetScrollRate(5, 5)
+        self.history_sizer = wx.BoxSizer(wx.VERTICAL)
+        self.history.SetSizer(self.history_sizer)
+        vbox.Add(self.history, proportion=1, flag=wx.EXPAND | wx.ALL, border=5)
+
+        hbox = wx.BoxSizer(wx.HORIZONTAL)
+        self.input_box = wx.TextCtrl(panel, size=(-1, 30))
+        hbox.Add(self.input_box, proportion=1, flag=wx.EXPAND | wx.ALL, border=5)
+
+        send_btn = wx.Button(panel, label="Enviar")
+        send_btn.Bind(wx.EVT_BUTTON, self.send_message)
+        hbox.Add(send_btn, flag=wx.ALL, border=5)
+
+        vbox.Add(hbox, flag=wx.EXPAND)
+        panel.SetSizer(vbox)
+
+        self.Show()
+
+    def add_message(self, message, is_user=True, update_last=False):
+        """Adiciona uma mensagem ao painel de histórico."""
+        if update_last and self.history_sizer.GetChildren():
+            # Atualiza o último painel em vez de criar um novo
+            last_panel = self.history_sizer.GetChildren()[-1].GetWindow()
+            last_text = last_panel.GetChildren()[0]
+            last_text.SetLabel(message)
+            last_text.Wrap(self.GetSize()[0] - 50)
+            self.history.Layout()
+            self.history.Scroll(-1, self.history.GetVirtualSize()[1])
+            return
+
+        message_panel = wx.Panel(self.history, size=(-1, -1))
+        message_sizer = wx.BoxSizer(wx.HORIZONTAL)
+
+        # Estilo e cores diferentes para usuário e IA
+        bg_color = wx.Colour(200, 230, 201) if is_user else wx.Colour(187, 222, 251)
+        text_color = wx.Colour(0, 0, 0)
+
+        message_text = wx.StaticText(message_panel, label=message, style=wx.ALIGN_LEFT)
+        message_text.Wrap(self.GetSize()[0] - 50)  # Ajuste de largura para o texto
+        message_text.SetBackgroundColour(bg_color)
+        message_text.SetForegroundColour(text_color)
+
+        # Adicionar funcionalidade de cópia
+        message_text.Bind(wx.EVT_RIGHT_DOWN, self.copy_message)
+
+        # Ajustar alinhamento baseado no tipo de mensagem
+        if is_user:
+            message_sizer.AddStretchSpacer()
+            message_sizer.Add(message_text, flag=wx.EXPAND | wx.ALL, border=5)
+        else:
+            message_sizer.Add(message_text, flag=wx.EXPAND | wx.ALL, border=5)
+            message_sizer.AddStretchSpacer()
+
+        message_panel.SetSizer(message_sizer)
+        self.history_sizer.Add(message_panel, flag=wx.EXPAND | wx.ALL, border=5)
+        self.history.Layout()
+        self.history.Scroll(-1, self.history.GetVirtualSize()[1])
+
+    def send_message(self, event):
+        user_message = self.input_box.GetValue().strip()
+        if not user_message:
+            return
+
+        # Exibir mensagem do usuário na interface
+        self.add_message(f"Você: {user_message}", is_user=True)
+        self.input_box.Clear()
+
+        # Enviar mensagem para a API em uma thread separada
+        thread = threading.Thread(target=self.handle_ai_response, args=(user_message,))
+        thread.start()
+
+    def handle_ai_response(self, user_message):
+        try:
+            response = self.query_ai(user_message)
+            ai_response = response.get("choices", [{}])[0].get("message", {}).get("content", "Sem resposta.")
+            self.display_dynamic_ai_message(ai_response)
+        except Exception as e:
+            wx.CallAfter(self.add_message, f"Erro: {str(e)}", is_user=False)
+
+    def display_dynamic_ai_message(self, full_message):
+        """Exibe a mensagem da IA gradualmente, simulando o carregamento."""
+        current_message = "IA: "
+        wx.CallAfter(self.add_message, current_message, is_user=False)
+
+        for char in full_message:
+            current_message += char
+            wx.CallAfter(self.add_message, current_message, is_user=False, update_last=True)
+            time.sleep(0.02)  # Simula a geração gradual de texto
+
+    def query_ai(self, message):
+        payload = {
+            "model": MODEL_NAME,
+            "messages": [
+                {"role": "system", "content": "Você é um assistente útil."},
+                {"role": "user", "content": message}
+            ]
+        }
+        headers = {"Content-Type": "application/json"}
+        response = requests.post(API_URL, headers=headers, data=json.dumps(payload))
+        response.raise_for_status()
+        return response.json()
+
+    def copy_message(self, event):
+        """Permite copiar o texto da mensagem clicada com o botão direito."""
+        widget = event.GetEventObject()
+        if isinstance(widget, wx.StaticText):
+            text_to_copy = widget.GetLabel()
+            if wx.TheClipboard.Open():
+                wx.TheClipboard.SetData(wx.TextDataObject(text_to_copy))
+                wx.TheClipboard.Close()
+
+if __name__ == "__main__":
+    app = wx.App(False)
+    frame = ChatApp(None)
+    app.MainLoop()
+
+
+
+
+
+
+
+=== 0.txt ===
+## ia chat
+Estamos discutindo um projeto e organizando as ideias. Estamos criando um programa resumidor com Yan, que será semelhante a um navegador com várias abas. A primeira aba resumirá vídeos do YouTube que inserirmos, trazendo a transcrição e a opção de resumir. A segunda aba resumirá vídeos offline que já temos no computador. A terceira aba será um resumidor de PDF, com um chat para resumir ou fazer perguntas sobre o arquivo. Todas as abas terão um chat. O programa usará inteligência artificial da Meta. Já tenho parte do código funcionando e um protótipo em wxPython. Precisamos organizar as ideias para começar a implementar o programa com os requisitos mencionados. 
+
+Para organizar as ideias, podemos estruturar o projeto em etapas claras e definir os requisitos de cada aba. Esta é uma proposta inicial: 
+
+Estrutura do Programa 
+Interface Principal (wxPython) com múltiplas abas, cada uma com funcionalidades específicas. Um layout intuitivo e responsivo para facilitar a navegação, além de um chat integrado em todas as abas. 
+
+Funcionalidades por Aba 
+Para a aba de resumir vídeos do YouTube, haverá um campo para inserir o link do vídeo. O sistema fará o download automático das legendas e exibirá a transcrição, com um botão para resumir a transcrição com a IA e chat para interagir. A aba de vídeos offline permitirá carregar arquivos de vídeo do computador, extraindo áudio e fazendo a transcrição, que também poderá ser resumida com a IA. Na aba de PDFs, será possível carregar arquivos, visualizar o conteúdo, gerar um resumo com a IA e fazer perguntas ou refinar o resumo através do chat. 
+
+O programa terá inteligência artificial integrada ao modelo da Meta para processar e resumir textos, com chat similar ao GPT em todas as abas. A estrutura do código será modular, com a interface e cada aba separadamente. Um módulo específico será designado para cada função. 
+
+Os próximos passos incluem definir o layout da interface, finalizar os requisitos e as entradas/saídas para cada aba, estruturar os módulos para processar os dados, integrar a IA da Meta para o chat e os resumos, e testar a interação entre as abas e a IA. 
+
+Vamos fazer em orientado objeto e dividir em fases. Monte para mim apenas o front-end do programa em wxPython. E monte uma árvore binária dos arquivos main do programa. Explique a lógica que vamos abordar. Explique para mim onde ficará mais ou menos cada função, como vamos dividir. Se vamos programar cada aba para alguma coisa ou se vamos dividir, tem funções. Cada página de código executa uma função e assim por diante. 
+
+Adotaremos uma abordagem orientada a objetos e dividiremos o programa em classes para cada aba. A janela principal (MainFrame) gerenciará as abas, que serão instâncias de classes separadas. 
+
+Árvore binária dos arquivos principais do programa: 
+Main. py 
+├── YouTubePage. py 
+├── OfflineVideoPage. py 
+├── PDFPage. py 
+├── ChatHandler. py 
+├── Utils/ 
+│ ├── YouTubeUtils. py 
+│ ├── VideoUtils. py 
+│ ├── PDFUtils. py 
+│ ├── AIUtils. py 
+└── Assets/ 
+├── Icons/ 
+├── Themes/ 
+
+A janela principal é responsável por criá-la e gerenciar as abas. Cada aba terá suas próprias funções de front-end com chamadas a funções nos arquivos da pasta Utils. As funções do chat estarão centralizadas em ChatHandler. py. 
+
+O programa será modular, onde cada aba trata apenas da interface e chamadas a funções, deixando o processamento para as funções utilitárias. Quando uma nova aba for adicionada, bastará criar uma nova classe e módulo utilitário correspondente. 
+
+Em relação ao código do front-end em wxPython, a estrutura inicial inclui a criação da janela principal e as abas para vídeos do YouTube, vídeos offline e PDFs, cada uma com um layout básico de botões e campos de input. 
+
+Nos próximos passos, precisamos dividir o código em arquivos separados, criar módulos utilitários e integrar a lógica do chat nas abas. Também é essencial testar o protótipo com dados reais e ajustar a interface.
+
+
+vamos começar pela aba do youtube 
+esse é o código que eu já tenho funcionando
+
+```
+import wx
+import yt_dlp
+import re
+import os
+from wx.lib.pubsub import pub
+import threading
+
+class SubtitleApp(wx.Frame):
+    def __init__(self, parent, title):
+        super(SubtitleApp, self).__init__(parent, title=title, size=(800, 600))
+
+        self.InitUI()
+        self.Centre()
+        self.Show()
+
+    def InitUI(self):
+        panel = wx.Panel(self)
+        vbox = wx.BoxSizer(wx.VERTICAL)
+
+        # Linha para URL e botão "Colar"
+        hbox1 = wx.BoxSizer(wx.HORIZONTAL)
+        self.url_label = wx.StaticText(panel, label="URL do Vídeo:")
+        hbox1.Add(self.url_label, flag=wx.RIGHT, border=8)
+        self.url_text = wx.TextCtrl(panel)
+        hbox1.Add(self.url_text, proportion=1)
+        
+        self.paste_button = wx.Button(panel, label="Colar")
+        self.paste_button.Bind(wx.EVT_BUTTON, self.OnPaste)
+        hbox1.Add(self.paste_button, flag=wx.LEFT, border=8)
+        
+        vbox.Add(hbox1, flag=wx.EXPAND | wx.LEFT | wx.RIGHT | wx.TOP, border=10)
+
+        # Botões principais e barra de progresso
+        hbox2 = wx.BoxSizer(wx.HORIZONTAL)
+
+        # Alinhado à esquerda
+        left_box = wx.BoxSizer(wx.HORIZONTAL)
+        self.process_button = wx.Button(panel, label="Processar")
+        self.process_button.Bind(wx.EVT_BUTTON, self.OnProcess)
+        left_box.Add(self.process_button)
+
+        self.clear_button = wx.Button(panel, label="Limpar")
+        self.clear_button.Bind(wx.EVT_BUTTON, self.OnClear)
+        left_box.Add(self.clear_button, flag=wx.LEFT | wx.RIGHT, border=5)
+
+        self.copy_button = wx.Button(panel, label="Copiar")
+        self.copy_button.Bind(wx.EVT_BUTTON, self.OnCopy)
+        left_box.Add(self.copy_button, flag=wx.LEFT | wx.RIGHT, border=5)
+
+        self.summarize_button = wx.Button(panel, label="Resumir")
+        self.summarize_button.Bind(wx.EVT_BUTTON, self.OnSummarize)
+        left_box.Add(self.summarize_button, flag=wx.LEFT | wx.RIGHT, border=5)
+
+        self.progress_bar = wx.Gauge(panel, range=100, size=(250, 25))
+        left_box.Add(self.progress_bar, flag=wx.LEFT, border=10)
+
+        hbox2.Add(left_box, flag=wx.ALIGN_LEFT)
+        vbox.Add(hbox2, flag=wx.EXPAND | wx.TOP | wx.BOTTOM, border=10)
+
+        # Caixa de texto para texto processado
+        hbox3 = wx.BoxSizer(wx.HORIZONTAL)
+
+        # Tela original de texto
+        self.text_ctrl = wx.TextCtrl(panel, style=wx.TE_MULTILINE | wx.TE_READONLY)
+        hbox3.Add(self.text_ctrl, proportion=1, flag=wx.EXPAND | wx.ALL, border=5)
+
+        # Nova tela para resumo
+        self.summary_ctrl = wx.TextCtrl(panel, style=wx.TE_MULTILINE | wx.TE_READONLY)
+        hbox3.Add(self.summary_ctrl, proportion=1, flag=wx.EXPAND | wx.ALL, border=5)
+
+        vbox.Add(hbox3, proportion=1, flag=wx.EXPAND)
+
+        # Contador de palavras para o texto original
+        self.word_count_label = wx.StaticText(panel, label="Palavras: 0")
+        vbox.Add(self.word_count_label, flag=wx.ALIGN_RIGHT | wx.RIGHT | wx.BOTTOM, border=10)
+
+        # Contador de palavras para o resumo
+        self.summary_word_count_label = wx.StaticText(panel, label="Palavras (Resumo): 0")
+        vbox.Add(self.summary_word_count_label, flag=wx.ALIGN_RIGHT | wx.RIGHT | wx.BOTTOM, border=10)
+
+        panel.SetSizer(vbox)
+
+    def OnPaste(self, event):
+        """Cola o conteúdo da área de transferência na URL e limpa o campo antes."""
+        if wx.TheClipboard.Open():
+            if wx.TheClipboard.IsSupported(wx.DataFormat(wx.DF_TEXT)):
+                data = wx.TextDataObject()
+                wx.TheClipboard.GetData(data)
+                self.url_text.SetValue(data.GetText())
+            wx.TheClipboard.Close()
+
+    def OnProcess(self, event):
+        """Inicia o processamento do vídeo."""
+        video_url = self.url_text.GetValue()
+        if not video_url:
+            wx.MessageBox("Por favor, insira uma URL do vídeo.", "Erro", wx.ICON_ERROR)
+            return
+
+        self.progress_bar.SetValue(10)  # Atualiza a barra de progresso
+
+        def run():
+            subtitle_file = download_subtitles(video_url)
+            if subtitle_file:
+                self.progress_bar.SetValue(70)
+                consolidated_file = clean_and_consolidate_subtitles(subtitle_file)
+                self.progress_bar.SetValue(100)
+                if consolidated_file:
+                    with open(consolidated_file, 'r', encoding='utf-8') as file:
+                        content = file.read()
+                    wx.CallAfter(self.text_ctrl.SetValue, content)
+
+                    # Contar palavras e atualizar o contador
+                    word_count = len(content.split())
+                    wx.CallAfter(self.word_count_label.SetLabel, f"Palavras: {word_count}")
+                else:
+                    wx.CallAfter(wx.MessageBox, "Erro ao consolidar as legendas.", "Erro", wx.ICON_ERROR)
+            else:
+                wx.CallAfter(wx.MessageBox, "Não foi possível obter as legendas.", "Erro", wx.ICON_ERROR)
+
+        thread = threading.Thread(target=run)
+        thread.start()
+
+    def OnClear(self, event):
+        """Limpa todos os campos."""
+        self.url_text.SetValue("")
+        self.text_ctrl.SetValue("")
+        self.summary_ctrl.SetValue("")
+        self.progress_bar.SetValue(0)
+        self.word_count_label.SetLabel("Palavras: 0")
+
+    def OnCopy(self, event):
+        """Copia o texto processado para a área de transferência."""
+        text = self.text_ctrl.GetValue()
+        if text:
+            if wx.TheClipboard.Open():
+                wx.TheClipboard.SetData(wx.TextDataObject(text))
+                wx.TheClipboard.Close()
+                wx.MessageBox("Texto copiado com sucesso!", "Informação", wx.ICON_INFORMATION)
+        else:
+            wx.MessageBox("Nada para copiar.", "Erro", wx.ICON_ERROR)
+
+    def OnSummarize(self, event):
+        """Evento para resumir o texto (a funcionalidade será implementada depois)."""
+        wx.MessageBox("Função de resumo ainda não implementada.", "Informação", wx.ICON_INFORMATION)
+
+        # Exemplo de como contar palavras no texto resumido (após implementar o resumo)
+        summary_content = self.summary_ctrl.GetValue()  # Texto do resumo
+        summary_word_count = len(summary_content.split())
+        self.summary_word_count_label.SetLabel(f"Palavras (Resumo): {summary_word_count}")
+
+# Funções auxiliares para download e processamento de legendas
+def download_subtitles(video_url):
+    ydl_opts = {
+        'writesubtitles': True,
+        'writeautomaticsub': True,
+        'subtitleslangs': ['pt', 'pt-br'],
+        'skip_download': True,
+        'quiet': False
+    }
+
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        try:
+            result = ydl.extract_info(video_url, download=False)
+            subtitle_file = None
+
+            if 'requested_subtitles' in result:
+                subtitle_file = ydl.prepare_filename(result)
+                subtitle_file = subtitle_file.rsplit('.', 1)[0] + '.pt.vtt'
+                ydl.download([video_url])
+                print(f"Legendas baixadas para: {subtitle_file}")
+            else:
+                print("Nenhuma legenda em português disponível.")
+            return subtitle_file
+        except Exception as e:
+            print(f"Erro ao baixar legendas: {e}")
+            return None
+
+def clean_and_consolidate_subtitles(subtitle_file):
+    try:
+        with open(subtitle_file, 'r', encoding='utf-8') as file:
+            content = file.read()
+
+        content = re.sub(r'(WEBVTT|Kind:.*|Language:.*)', '', content)
+        content = re.sub(r'\d{2}:\d{2}:\d{2}\.\d{3} --> .*?\n', '', content)
+        content = re.sub(r'<.*?>', '', content)
+        content = re.sub(r'&nbsp;', ' ', content)
+        content = re.sub(r'align:start position:\d+%|\n+', '\n', content).strip()
+
+        lines = content.splitlines()
+        unique_lines = list(dict.fromkeys(line.strip() for line in lines if line.strip()))
+
+        consolidated_text = '\n'.join(unique_lines).strip()
+
+        cleaned_filename = subtitle_file.replace('.vtt', '_consolidated.txt')
+        with open(cleaned_filename, 'w', encoding='utf-8') as file:
+            file.write(consolidated_text)
+
+        print(f"Texto consolidado salvo em: {cleaned_filename}")
+        return cleaned_filename
+    except Exception as e:
+        print(f"Erro ao limpar e consolidar as legendas: {e}")
+        return None
+
+if __name__ == "__main__":
+    app = wx.App()
+    SubtitleApp(None, title="Transcrição e Resumo de Vídeos do YouTube")
+    app.MainLoop()
+
+```
+
+e tenho esse código do chat que conversa com a IA
+
+```
+import wx
+import requests
+import json
+import threading
+import time
+
+# Configuração da API
+API_URL = "http://localhost:11434/v1/chat/completions"
+MODEL_NAME = "gemma2:2b"  # Alterado para o modelo correto
+
+class ChatApp(wx.Frame):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # Configurar a interface
+        self.SetTitle("Chat com IA")
+        self.SetSize((600, 400))
+        panel = wx.Panel(self)
+
+        vbox = wx.BoxSizer(wx.VERTICAL)
+
+        # Substituir painel simples por ScrolledWindow
+        self.history = wx.ScrolledWindow(panel, size=(-1, 300), style=wx.VSCROLL | wx.ALWAYS_SHOW_SB)
+        self.history.SetBackgroundColour(wx.Colour(240, 240, 240))  # Cor de fundo para o painel
+        self.history.SetScrollRate(5, 5)
+        self.history_sizer = wx.BoxSizer(wx.VERTICAL)
+        self.history.SetSizer(self.history_sizer)
+        vbox.Add(self.history, proportion=1, flag=wx.EXPAND | wx.ALL, border=5)
+
+        hbox = wx.BoxSizer(wx.HORIZONTAL)
+        self.input_box = wx.TextCtrl(panel, size=(-1, 30))
+        hbox.Add(self.input_box, proportion=1, flag=wx.EXPAND | wx.ALL, border=5)
+
+        send_btn = wx.Button(panel, label="Enviar")
+        send_btn.Bind(wx.EVT_BUTTON, self.send_message)
+        hbox.Add(send_btn, flag=wx.ALL, border=5)
+
+        vbox.Add(hbox, flag=wx.EXPAND)
+        panel.SetSizer(vbox)
+
+        self.Show()
+
+    def add_message(self, message, is_user=True, update_last=False):
+        """Adiciona uma mensagem ao painel de histórico."""
+        if update_last and self.history_sizer.GetChildren():
+            # Atualiza o último painel em vez de criar um novo
+            last_panel = self.history_sizer.GetChildren()[-1].GetWindow()
+            last_text = last_panel.GetChildren()[0]
+            last_text.SetLabel(message)
+            last_text.Wrap(self.GetSize()[0] - 50)
+            self.history.Layout()
+            self.history.Scroll(-1, self.history.GetVirtualSize()[1])
+            return
+
+        message_panel = wx.Panel(self.history, size=(-1, -1))
+        message_sizer = wx.BoxSizer(wx.HORIZONTAL)
+
+        # Estilo e cores diferentes para usuário e IA
+        bg_color = wx.Colour(200, 230, 201) if is_user else wx.Colour(187, 222, 251)
+        text_color = wx.Colour(0, 0, 0)
+
+        message_text = wx.StaticText(message_panel, label=message, style=wx.ALIGN_LEFT)
+        message_text.Wrap(self.GetSize()[0] - 50)  # Ajuste de largura para o texto
+        message_text.SetBackgroundColour(bg_color)
+        message_text.SetForegroundColour(text_color)
+
+        # Adicionar funcionalidade de cópia
+        message_text.Bind(wx.EVT_RIGHT_DOWN, self.copy_message)
+
+        # Ajustar alinhamento baseado no tipo de mensagem
+        if is_user:
+            message_sizer.AddStretchSpacer()
+            message_sizer.Add(message_text, flag=wx.EXPAND | wx.ALL, border=5)
+        else:
+            message_sizer.Add(message_text, flag=wx.EXPAND | wx.ALL, border=5)
+            message_sizer.AddStretchSpacer()
+
+        message_panel.SetSizer(message_sizer)
+        self.history_sizer.Add(message_panel, flag=wx.EXPAND | wx.ALL, border=5)
+        self.history.Layout()
+        self.history.Scroll(-1, self.history.GetVirtualSize()[1])
+
+    def send_message(self, event):
+        user_message = self.input_box.GetValue().strip()
+        if not user_message:
+            return
+
+        # Exibir mensagem do usuário na interface
+        self.add_message(f"Você: {user_message}", is_user=True)
+        self.input_box.Clear()
+
+        # Enviar mensagem para a API em uma thread separada
+        thread = threading.Thread(target=self.handle_ai_response, args=(user_message,))
+        thread.start()
+
+    def handle_ai_response(self, user_message):
+        try:
+            response = self.query_ai(user_message)
+            ai_response = response.get("choices", [{}])[0].get("message", {}).get("content", "Sem resposta.")
+            self.display_dynamic_ai_message(ai_response)
+        except Exception as e:
+            wx.CallAfter(self.add_message, f"Erro: {str(e)}", is_user=False)
+
+    def display_dynamic_ai_message(self, full_message):
+        """Exibe a mensagem da IA gradualmente, simulando o carregamento."""
+        current_message = "IA: "
+        wx.CallAfter(self.add_message, current_message, is_user=False)
+
+        for char in full_message:
+            current_message += char
+            wx.CallAfter(self.add_message, current_message, is_user=False, update_last=True)
+            time.sleep(0.02)  # Simula a geração gradual de texto
+
+    def query_ai(self, message):
+        payload = {
+            "model": MODEL_NAME,
+            "messages": [
+                {"role": "system", "content": "Você é um assistente útil."},
+                {"role": "user", "content": message}
+            ]
+        }
+        headers = {"Content-Type": "application/json"}
+        response = requests.post(API_URL, headers=headers, data=json.dumps(payload))
+        response.raise_for_status()
+        return response.json()
+
+    def copy_message(self, event):
+        """Permite copiar o texto da mensagem clicada com o botão direito."""
+        widget = event.GetEventObject()
+        if isinstance(widget, wx.StaticText):
+            text_to_copy = widget.GetLabel()
+            if wx.TheClipboard.Open():
+                wx.TheClipboard.SetData(wx.TextDataObject(text_to_copy))
+                wx.TheClipboard.Close()
+
+if __name__ == "__main__":
+    app = wx.App(False)
+    frame = ChatApp(None)
+    app.MainLoop()
+
+```
+
+=== ajuda.txt ===
+Estamos discutindo um projeto para criar um programa resumidor. Ele terá várias abas: uma para resumir vídeos do YouTube, outra para vídeos offline e uma terceira para PDFs, todas com chat integrados. O programa usará inteligência artificial da Meta. Um protótipo está em wxPython, e agora estamos pensando em estruturar o projeto em etapas.
+
+A estrutura do programa deve ser voltada para uma interface intuitiva com múltiplas abas. Cada aba terá funcionalidades específicas, como resumir vídeos e PDFs. A ideia é usar um framework como Flask ou FastAPI para criar uma API que conecte a interface da web ao backend em Python. A estrutura em árvore binária será usada para organizar os arquivos, incluindo classes específicas para cada aba e módulos utilitários.
+
+Cada aba será uma classe responsável por sua interface e funções, como baixar legendas ou extrair texto de PDFs, enquanto um módulo de chat gerenciará a comunicação em todas as abas. A lógica será modular, delegando processamento pesado a funções utilitárias. Para a primeira fase, precisamos adaptar o código existente para que a lógica do chat e das interações fique no backend e implementar o front-end em HTML, CSS e JavaScript.
+
+A proposta inclui uma divisão em módulos: frontend, que conterá os arquivos da interface; e backend, que lidará com a lógica do programa. A comunicação entre o front-end e o back-end será feita por chamadas de API. O próximo passo é criar a interface básica em HTML, CSS e JavaScript e integrar com o Flask. O código será desenvolvido de forma gradual, começando do básico e evoluindo conforme necessário.
+
+Atualmente, estamos prontos para iniciar a estrutura do arquivo principal, o Main. py, que gerenciará o servidor e rotas. Depois, podemos avançar para as abas específicas, definindo suas funcionalidades em arquivos separados.
+
+Main.py ├── YouTubePage.py # Esquerda │ ├── Estrutura de aba (HTML, CSS, JS para interface da aba YouTube) │ ├── Funções: carregar transcrição do YouTube, enviar à IA para resumo │ └── Comunica com: YouTubeUtils.py, AIUtils.py ├── OfflineVideoPage.py # Direita │ ├── Estrutura de aba (HTML, CSS, JS para aba de vídeos offline) │ ├── Funções: processar vídeos locais, transcrever e resumir │ └── Comunica com: VideoUtils.py, AIUtils.py ├── PDFPage.py # Esquerda │ ├── Estrutura de aba (HTML, CSS, JS para resumir PDFs) │ ├── Funções: carregar PDFs, extrair texto e resumir │ └── Comunica com: PDFUtils.py, AIUtils.py ├── ChatHandler.py # Direita │ ├── Lida com todas as requisições de chat nas abas │ ├── Estruturação: rotas para API Flask │ └── Comunica com: AIUtils.py └── Utils # Suporte para lógica de negócios ├── YouTubeUtils.py # Esquerda │ ├── Download de legendas, extração de transcrição │ └── APIs YouTube e pré-processamento ├── VideoUtils.py # Direita │ ├── Extração de áudio e texto de vídeos locais │ └── Pré-processamento para IA ├── PDFUtils.py # Esquerda │ ├── Extração de texto de PDFs │ └── Processamento semântico └── AIUtils.py # Direita ├── Comunicação com a IA da Meta (API HTTP ou local) ├── Formatação de mensagens └── Suporte para chats dinâmicos
+
+BLACKBOXAI
+
+A estrutura do seu projeto parece bem organizada e modular, o que é essencial para facilitar o desenvolvimento e a manutenção. Abaixo, apresento uma visão geral de como você pode implementar cada parte do seu projeto, além de algumas sugestões para a implementação das funcionalidades.
+
+Estrutura do Projeto
+plaintext
+
+Verify
+
+Open In Editor
+Run
+Copy code
+Main.py
+├── YouTubePage.py                # Esquerda
+│   ├── Estrutura de aba (HTML, CSS, JS para interface da aba YouTube)
+│   ├── Funções: carregar transcrição do YouTube, enviar à IA para resumo
+│   └── Comunica com: YouTubeUtils.py, AIUtils.py
+├── OfflineVideoPage.py           # Direita
+│   ├── Estrutura de aba (HTML, CSS, JS para aba de vídeos offline)
+│   ├── Funções: processar vídeos locais, transcrever e resumir
+│   └── Comunica com: VideoUtils.py, AIUtils.py
+├── PDFPage.py                    # Esquerda
+│   ├── Estrutura de aba (HTML, CSS, JS para resumir PDFs)
+│   ├── Funções: carregar PDFs, extrair texto e resumir
+│   └── Comunica com: PDFUtils.py, AIUtils.py
+├── ChatHandler.py                # Direita
+│   ├── Lida com todas as requisições de chat nas abas
+│   ├── Estruturação: rotas para API Flask
+│   └── Comunica com: AIUtils.py
+└── Utils                         # Suporte para lógica de negócios
+    ├── YouTubeUtils.py           # Esquerda
+    │   ├── Download de legendas, extração de transcrição
+    │   └── APIs YouTube e pré-processamento
+    ├── VideoUtils.py             # Direita
+    │   ├── Extração de áudio e texto de vídeos locais
+    │   └── Pré-processamento para IA
+    ├── PDFUtils.py               # Esquerda
+    │   ├── Extração de texto de PDFs
+    │   └── Processamento semântico
+    └── AIUtils.py                # Direita
+        ├── Comunicação com a IA da Meta (API HTTP ou local)
+        ├── Formatação de mensagens
+        └── Suporte para chats dinâmicos
+Implementação das Funcionalidades
+Main.py:
+
+Inicialize o servidor Flask e defina as rotas para cada aba.
+Configure a comunicação entre o front-end e o back-end.
+python
+
+Verify
+
+Open In Editor
+Run
+Copy code
+from flask import Flask, render_template
+from YouTubePage import youtube_page
+from OfflineVideoPage import offline_video_page
+from PDFPage import pdf_page
+from ChatHandler import chat_handler
+
+app = Flask(__name__)
+
+app.register_blueprint(youtube_page, url_prefix='/youtube')
+app.register_blueprint(offline_video_page, url_prefix='/offline')
+app.register_blueprint(pdf_page, url_prefix='/pdf')
+app.register_blueprint(chat_handler, url_prefix='/chat')
+
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+if __name__ == '__main__':
+    app.run(debug=True)
+YouTubePage.py:
+
+Crie a estrutura HTML para a aba do YouTube.
+Implemente funções para carregar transcrições e enviar para a IA.
+python
+
+Verify
+
+Open In Editor
+Run
+Copy code
+from flask import Blueprint, render_template, request
+from Utils.YouTubeUtils import download_subtitles
+from Utils.AIUtils import summarize_text
+
+youtube_page = Blueprint('youtube_page', __name__)
+
+@youtube_page.route('/')
+def youtube():
+    return render_template('youtube.html')
+
+@youtube_page.route('/summarize', methods=['POST'])
+def summarize_youtube():
+    video_url = request.form['video_url']
+    subtitles = download_subtitles(video_url)
+    summary = summarize_text(subtitles)
+    return {'summary': summary}
+OfflineVideoPage.py:
+
+Similar à aba do YouTube, mas para vídeos offline.
+Implemente funções para processar vídeos locais.
+python
+
+Verify
+
+Open In Editor
+Run
+Copy code
+from flask import Blueprint, render_template, request
+from Utils.VideoUtils import process_local_video
+from Utils.AIUtils import summarize_text
+
+offline_video_page = Blueprint('offline_video_page', __name__)
+
+@offline_video_page.route('/')
+def offline_video():
+    return render_template('offline_video.html')
+
+@offline_video_page.route('/summarize', methods=['POST'])
+def summarize_offline_video():
+    video_file = request.files['video_file']
+    text = process_local_video(video_file)
+    summary = summarize_text(text)
+    return {'summary
+You
+
+Aqui está o plano básico para o nome de cada arquivo de código e sua função:
+
+Main.py
+
+Inicializa a aplicação e gerencia as rotas principais. Ponto de entrada do programa. YouTubePage.py
+
+Gerencia a lógica para a aba de vídeos do YouTube. Inclui funções para baixar transcrições, processar vídeos e se comunicar com a IA. OfflineVideoPage.py
+
+Gerencia a aba de vídeos offline. Inclui funções para processar arquivos locais e enviar para a IA. PDFPage.py
+
+Gerencia a aba de PDFs. Inclui funções para análise de PDF e interação com a IA. ChatHandler.py
+
+Centraliza toda a lógica do chat em uma classe reutilizável. Trata envio, recebimento e exibição de mensagens. Pasta Utils/: Módulos de Utilitários
+
+YouTubeUtils.py: Funções para download de legendas e transcrições de vídeos do YouTube. VideoUtils.py: Processamento e transcrição de vídeos offline. PDFUtils.py: Extração e tratamento de textos de PDFs. AIUtils.py: Lógica para se comunicar com a IA da Meta. Pasta Assets/: Recursos Visuais
+
+Icons/: Ícones usados no front-end. Themes/: Arquivos CSS e templates HTML.
+
+cria um comando no cmd para eu criar todos os arquivos de código
+
+BLACKBOXAI
+
+Para criar todos os arquivos de código e pastas conforme a estrutura que você descreveu, você pode usar um comando no terminal (cmd) do Windows. Abaixo está um comando que você pode copiar e colar no seu terminal para criar a estrutura de diretórios e arquivos:
+
+cmd
+
+Verify
+
+Open In Editor
+Run
+Copy code
+mkdir MyProject
+cd MyProject
+mkdir Utils Assets Assets\Icons Assets\Themes
+echo "" > Main.py
+echo "" > YouTubePage.py
+echo "" > OfflineVideoPage.py
+echo "" > PDFPage.py
+echo "" > ChatHandler.py
+echo "" > Utils\YouTubeUtils.py
+echo "" > Utils\VideoUtils.py
+echo "" > Utils\PDFUtils.py
+echo "" > Utils\AIUtils.py
+echo "" > Assets\Icons\.gitkeep
+echo "" > Assets\Themes\.gitkeep
+Explicação do Comando:
+mkdir MyProject: Cria uma nova pasta chamada MyProject.
+cd MyProject: Navega para a pasta MyProject.
+mkdir Utils Assets Assets\Icons Assets\Themes: Cria as pastas Utils, Assets, Icons e Themes.
+echo "" > Main.py: Cria um arquivo vazio chamado Main.py.
+echo "" > YouTubePage.py: Cria um arquivo vazio chamado YouTubePage.py.
+echo "" > OfflineVideoPage.py: Cria um arquivo vazio chamado OfflineVideoPage.py.
+echo "" > PDFPage.py: Cria um arquivo vazio chamado PDFPage.py.
+echo "" > ChatHandler.py: Cria um arquivo vazio chamado ChatHandler.py.
+echo "" > Utils\YouTubeUtils.py: Cria um arquivo vazio chamado YouTubeUtils.py na pasta Utils.
+echo "" > Utils\VideoUtils.py: Cria um arquivo vazio chamado VideoUtils.py na pasta Utils.
+echo "" > Utils\PDFUtils.py: Cria um arquivo vazio chamado PDFUtils.py na pasta Utils.
+echo "" > Utils\AIUtils.py: Cria um arquivo vazio chamado AIUtils.py na pasta Utils.
+echo "" > Assets\Icons\.gitkeep: Cria um arquivo .gitkeep na pasta Icons para manter a pasta no controle de versão (opcional).
+echo "" > Assets\Themes\.gitkeep: Cria um arquivo .gitkeep na pasta Themes para manter a pasta no controle de versão (opcional).
+Como Executar:
+Abra o terminal (cmd).
+Cole o comando acima e pressione Enter.
+Isso criará a estrutura de diretórios e arquivos conforme especificado.
+Agora você pode começar a implementar a lógica do seu projeto nos arquivos criados!
+
+You
+
+Eu quero colocar esse comando no arquivo.bat para criar esses arquivos
+
+BLACKBOXAI
+
+Para criar um arquivo .bat que execute os comandos necessários para criar a estrutura de diretórios e arquivos, você pode seguir os passos abaixo:
+
+Abra um editor de texto: Você pode usar o Bloco de Notas ou qualquer outro editor de texto de sua preferência.
+
+Cole o seguinte código no editor:
+
+bat
+
+Verify
+
+Open In Editor
+Run
+Copy code
+@echo off
+mkdir MyProject
+cd MyProject
+mkdir Utils Assets Assets\Icons Assets\Themes
+echo "" > Main.py
+echo "" > YouTubePage.py
+echo "" > OfflineVideoPage.py
+echo "" > PDFPage.py
+echo "" > ChatHandler.py
+echo "" > Utils\YouTubeUtils.py
+echo "" > Utils\VideoUtils.py
+echo "" > Utils\PDFUtils.py
+echo "" > Utils\AIUtils.py
+echo "" > Assets\Icons\.gitkeep
+echo "" > Assets\Themes\.gitkeep
+echo Estrutura de diretórios e arquivos criada com sucesso!
+pause
+Salve o arquivo:
+
+Vá em "Arquivo" > "Salvar como".
+Na caixa de diálogo, escolha um local onde você deseja salvar o arquivo.
+No campo "Nome do arquivo", digite create_structure.bat (ou qualquer nome que você preferir, mas certifique-se de que a extensão seja .bat).
+No campo "Tipo", selecione "Todos os arquivos".
+Clique em "Salvar".
+Execute o arquivo .bat:
+
+Navegue até o local onde você salvou o arquivo create_structure.bat.
+Dê um duplo clique no arquivo para executá-lo.
+O que o arquivo .bat faz:
+@echo off: Desativa a exibição dos comandos no terminal.
+mkdir MyProject: Cria uma nova pasta chamada MyProject.
+cd MyProject: Navega para a pasta MyProject.
+mkdir Utils Assets Assets\Icons Assets\Themes: Cria as pastas Utils, Assets, Icons e Themes.
+echo "" > Main.py: Cria um arquivo vazio chamado Main.py.
+echo "" > YouTubePage.py: Cria um arquivo vazio chamado YouTubePage.py.
+echo "" > OfflineVideoPage.py: Cria um arquivo vazio chamado OfflineVideoPage.py.
+echo "" > PDFPage.py: Cria um arquivo vazio chamado PDFPage.py.
+echo "" > ChatHandler.py: Cria um arquivo vazio chamado ChatHandler.py.
+echo "" > Utils\YouTubeUtils.py: Cria um arquivo vazio chamado YouTubeUtils.py na pasta Utils.
+echo "" > Utils\VideoUtils.py: Cria um arquivo vazio chamado VideoUtils.py na pasta Utils.
+echo "" > Utils\PDFUtils.py: Cria um arquivo vazio chamado PDFUtils.py na pasta Utils.
+echo "" > Utils\AIUtils.py: Cria um arquivo vazio chamado AIUtils.py na pasta Utils.
+echo "" > Assets\Icons\.gitkeep: Cria um arquivo .gitkeep na pasta Icons para manter a pasta no controle de versão (opcional).
+echo "" > Assets\Themes\.gitkeep: Cria um arquivo .gitkeep na pasta Themes para manter a pasta no controle de versão (opcional).
+echo Estrutura de diretórios e arquivos criada com sucesso!: Exibe uma mensagem de sucesso.
+pause: Pausa a execução do script para que você possa ver a mensagem antes de fechar a janela do terminal.
+Agora você tem um arquivo .bat que pode ser executado para criar a estrutura do seu projeto de forma rápida e fácil!
+=== codigo_completo.txt ===
+# Main.py
+import wx
+from YouTubePage import YouTubePage
+
+class MainFrame(wx.Frame):
+    def __init__(self):
+        super().__init__(None, title="Resumidor de Vídeos", size=(800, 600))
+
+        # Criar um notebook para as abas
+        self.notebook = wx.Notebook(self)
+
+        # Adicionar a aba do YouTube
+        self.youtube_page = YouTubePage(self.notebook)
+        self.notebook.AddPage(self.youtube_page, "YouTube")
+
+        # Configurar o layout principal
+        sizer = wx.BoxSizer(wx.VERTICAL)
+        sizer.Add(self.notebook, 1, wx.EXPAND)
+        self.SetSizer(sizer)
+
+        self.Show()
+
+if __name__ == "__main__":
+    app = wx.App(False)
+    frame = MainFrame()
+    app.MainLoop()
+
+# SubtitleProcessor.py
+import yt_dlp
+import re
+import os
+import json
+
+class SubtitleProcessor:
+    def __init__(self):
+        pass
+
+    def download_subtitles(self, video_url):
+        ydl_opts = {
+            'writesubtitles': True,
+            'writeautomaticsub': True,
+            'subtitleslangs': ['pt', 'pt-br'],
+            'skip_download': True,
+            'quiet': False
+        }
+
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            try:
+                result = ydl.extract_info(video_url, download=False)
+                subtitle_file = None
+
+                if 'requested_subtitles' in result:
+                    subtitle_file = ydl.prepare_filename(result)
+                    subtitle_file = subtitle_file.rsplit('.', 1)[0] + '.pt.vtt'
+                    ydl.download([video_url])
+                    print(f"Legendas baixadas para: {subtitle_file}")
+                else:
+                    print("Nenhuma legenda em português disponível.")
+                return subtitle_file
+            except Exception as e:
+                print(f"Erro ao baixar legendas: {e}")
+                return None
+
+    def clean_and_consolidate_subtitles(self, subtitle_file, video_name):
+        try:
+            with open(subtitle_file, 'r', encoding='utf-8') as file:
+                content = file.read()
+
+            content = re.sub(r'(WEBVTT|Kind:.*|Language:.*)', '', content)
+            content = re.sub(r'\d{2}:\d{2}:\d{2}\.\d{3} --> .*?\n', '', content)
+            content = re.sub(r'<.*?>', '', content)
+            content = re.sub(r'&nbsp;', ' ', content)
+            content = re.sub(r'align:start position:\d+%|\n+', '\n', content).strip()
+
+            lines = content.splitlines()
+            unique_lines = list(dict.fromkeys(line.strip() for line in lines if line.strip()))
+
+            consolidated_text = '\n'.join(unique_lines).strip()
+
+            # Salvar as legendas em um arquivo JSON
+            json_filename = f"{video_name}_subtitles.json"
+            with open(json_filename, 'w', encoding='utf-8') as json_file:
+                json.dump({"subtitles": unique_lines}, json_file, ensure_ascii=False, indent=4)
+
+            print(f"Texto consolidado salvo em: {json_filename}")
+            return json_filename
+        except Exception as e:
+            print(f"Erro ao limpar e consolidar as legendas: {e}")
+            return None
+
+# YouTubePage.py
+import wx
+import json
+import os
+import threading
+from SubtitleProcessor import SubtitleProcessor
+
+class YouTubePage(wx.Panel):
+    def __init__(self, parent):
+        super(YouTubePage, self).__init__(parent)
+        self.subtitle_processor = SubtitleProcessor()
+        self.history_file = "história do YouTube/histórico.json"
+        self.InitUI()
+        self.LoadHistory()
+
+    def InitUI(self):
+        vbox = wx.BoxSizer(wx.HORIZONTAL)
+
+        # Sidebar para o histórico
+        self.sidebar = wx.ListBox(self, style=wx.LB_SINGLE)
+        vbox.Add(self.sidebar, proportion=1, flag=wx.EXPAND | wx.ALL, border=5)
+
+        # Pane para o conteúdo do YouTube
+        content_box = wx.BoxSizer(wx.VERTICAL)
+
+        # Linha para URL e botão "Colar"
+        hbox1 = wx.BoxSizer(wx.HORIZONTAL)
+        self.url_label = wx.StaticText(self, label="URL do Vídeo:")
+        hbox1.Add(self.url_label, flag=wx.RIGHT, border=8)
+        self.url_text = wx.TextCtrl(self)
+        hbox1.Add(self.url_text, proportion=1)
+        
+        self.paste_button = wx.Button(self, label="Colar")
+        self.paste_button.Bind(wx.EVT_BUTTON, self.OnPaste)
+        hbox1.Add(self.paste_button, flag=wx.LEFT, border=8)
+        
+        content_box.Add(hbox1, flag=wx.EXPAND | wx.LEFT | wx.RIGHT | wx.TOP, border=10)
+
+        # Botões principais e barra de progresso
+        hbox2 = wx.BoxSizer(wx.HORIZONTAL)
+
+        # Alinhado à esquerda
+        left_box = wx.BoxSizer(wx.HORIZONTAL)
+        self.process_button = wx.Button(self, label="Processar")
+        self.process_button.Bind(wx.EVT_BUTTON, self.OnProcess)
+        left_box.Add(self.process_button)
+
+        self.clear_button = wx.Button(self, label="Limpar")
+        self.clear_button.Bind(wx.EVT_BUTTON, self.OnClear)
+        left_box.Add(self.clear_button, flag=wx.LEFT | wx.RIGHT, border=5)
+
+        self.copy_button = wx.Button(self, label="Copiar")
+        self.copy_button.Bind(wx.EVT_BUTTON, self.OnCopy)
+        left_box.Add(self.copy_button, flag=wx.LEFT | wx.RIGHT, border=5)
+
+        self.summarize_button = wx.Button(self, label="Resumir")
+        self.summarize_button.Bind(wx.EVT_BUTTON, self.OnSummarize)
+        left_box.Add(self.summarize_button, flag=wx.LEFT | wx.RIGHT, border=5)
+
+        self.progress_bar = wx.Gauge(self, range=100, size=(250, 25))
+        left_box.Add(self.progress_bar, flag=wx.LEFT, border=10)
+
+        hbox2.Add(left_box, flag=wx.ALIGN_LEFT)
+        content_box.Add(hbox2, flag=wx.EXPAND | wx.TOP | wx.BOTTOM, border=10)
+
+        # Caixa de texto para texto processado
+        hbox3 = wx.BoxSizer(wx.HORIZONTAL)
+
+        # Tela original de texto
+        self.text_ctrl = wx.TextCtrl(self, style=wx.TE_MULTILINE | wx.TE_READONLY)
+        hbox3.Add(self.text_ctrl, proportion=1, flag=wx.EXPAND | wx.ALL, border=5)
+
+        # Nova tela para resumo
+        self.summary_ctrl = wx.TextCtrl(self, style=wx.TE_MULTILINE | wx.TE_READONLY)
+        hbox3.Add(self.summary_ctrl, proportion=1, flag=wx.EXPAND | wx.ALL, border=5)
+
+        content_box.Add(hbox3, proportion=1, flag=wx.EXPAND)
+
+        # Contador de palavras para o texto original
+        self.word_count_label = wx.StaticText(self, label="Palavras: 0")
+        content_box.Add(self.word_count_label, flag=wx.ALIGN_RIGHT | wx.RIGHT | wx.BOTTOM, border=10)
+
+        # Contador de palavras para o resumo
+        self.summary_word_count_label = wx.StaticText(self, label="Palavras (Resumo): 0")
+        content_box.Add(self.summary_word_count_label, flag=wx.ALIGN_RIGHT | wx.RIGHT | wx.BOTTOM, border=10)
+
+        vbox.Add(content_box, proportion=3, flag=wx.EXPAND)
+
+        self.SetSizer(vbox)
+
+    def OnPaste(self, event):
+        """Cola o conteúdo da área de transferência na URL e limpa o campo antes."""
+        if wx.TheClipboard.Open():
+            if wx.TheClipboard.IsSupported(wx.DataFormat(wx.DF_TEXT)):
+                data = wx.TextDataObject()
+                wx.TheClipboard.GetData(data)
+                self.url_text.SetValue(data.GetText())
+            wx.TheClipboard.Close()
+
+    def OnCopy(self, event):
+        """Copia o texto processado para a área de transferência."""
+        text = self.text_ctrl.GetValue()
+        if text:
+            if wx.TheClipboard.Open():
+                wx.TheClipboard.SetData(wx.TextDataObject(text))
+                wx.TheClipboard.Close()
+                wx.MessageBox("Texto copiado com sucesso!", "Informação", wx.ICON_INFORMATION)
+        else:
+            wx.MessageBox("Nada para copiar.", "Erro", wx.ICON_ERROR)
+
+    def OnSummarize(self, event):
+        """Evento para resumir o texto (a funcionalidade será implementada depois)."""
+        wx.MessageBox("Função de resumo ainda não implementada.", "Informação", wx.ICON_INFORMATION)
+
+        # Exemplo de como contar palavras no texto resumido (após implementar o resumo)
+        summary_content = self.summary_ctrl.GetValue()  # Texto do resumo
+        summary_word_count = len(summary_content.split())
+        self.summary_word_count_label.SetLabel(f"Palavras (Resumo): {summary_word_count}")
+
+    def GetVideoNameFromURL(self, url):
+        """Obtém o nome do vídeo a partir da URL."""
+        # Extrai o nome do vídeo do URL
+        # Exemplo: https://www.youtube.com/watch?v=dQw4w9WgXcQ -> "dQw4w9WgXcQ"
+        return url.split('v=')[-1]
+
+    def AddToHistory(self, video_name):
+        """Adiciona o nome do vídeo à sidebar."""
+        self.sidebar.Append(video_name)
+
+    def LoadHistory(self):
+        """Carrega o histórico de vídeos da pasta 'história do YouTube'."""
+        if not os.path.exists("história do YouTube"):
+            os.makedirs("história do YouTube")
+
+        if os.path.exists(self.history_file):
+            with open(self.history_file, 'r', encoding='utf-8') as file:
+                history = json.load(file)
+                for video_name in history:
+                    self.AddToHistory(video_name)
+
+    def OnProcess(self, event):
+        """Inicia o processamento do vídeo e atualiza o histórico na sidebar."""
+        video_url = self.url_text.GetValue()
+        if not video_url:
+            wx.MessageBox("Por favor, insira uma URL do vídeo.", "Erro", wx.ICON_ERROR)
+            return
+
+        self.progress_bar.SetValue(10)  # Atualiza a barra de progresso
+
+        def run():
+            subtitle_file = self.subtitle_processor.download_subtitles(video_url)
+            if subtitle_file:
+                self.progress_bar.SetValue(70)
+                video_name = self.GetVideoNameFromURL(video_url)
+                consolidated_file = self.subtitle_processor.clean_and_consolidate_subtitles(subtitle_file, video_name)
+                self.progress_bar.SetValue(100)
+                if consolidated_file:
+                    with open(consolidated_file, 'r', encoding='utf-8') as file:
+                        content = file.read()
+                    wx.CallAfter(self.text_ctrl.SetValue, content)
+
+                    # Contar palavras e atualizar o contador
+                    word_count = len(content.split())
+                    wx.CallAfter(self.word_count_label.SetLabel, f"Palavras: {word_count}")
+
+                    # Adicionar o nome do vídeo à sidebar e salvar o histórico
+                    wx.CallAfter(self.AddToHistory, video_name)
+                    self.SaveHistory(video_name)
+                else:
+                    wx.CallAfter(wx.MessageBox, "Erro ao consolidar as legendas.", "Erro", wx.ICON_ERROR)
+            else:
+                wx.CallAfter(wx.MessageBox, "Não foi possível obter as legendas.", "Erro", wx.ICON_ERROR)
+
+        thread = threading.Thread(target=run)
+        thread.start()
+
+    def OnClear(self, event):
+        """Limpa todos os campos e remove os arquivos de legendas armazenados."""
+        self.url_text.SetValue("")
+        self.text_ctrl.SetValue("")
+        self.summary_ctrl.SetValue("")
+        self.progress_bar.SetValue(0)
+        self.word_count_label.SetLabel("Palavras: 0")
+
+        # Limpar os arquivos de legendas na pasta
+        subtitle_files = [f for f in os.listdir("história do YouTube") if f.endswith('.txt')]
+        for file in subtitle_files:
+            os.remove(os.path.join("história do YouTube", file))
+
+        wx.MessageBox("Arquivos de legendas limpos.", "Informação", wx.ICON_INFORMATION)
+
+    def SaveHistory(self, video_name, video_url, subtitles_path):
+        """Salva o nome do vídeo, URL e caminho das legendas no histórico."""
+        if not os.path.exists("história do YouTube"):
+            os.makedirs("história do YouTube")
+
+        history = []
+        if os.path.exists(self.history_file):
+            with open(self.history_file, 'r', encoding='utf-8') as file:
+                history = json.load(file)
+
+        # Adiciona o vídeo ao histórico
+        history.append({
+            "name": video_name,
+            "url": video_url,
+            "subtitles": subtitles_path
+        })
+
+        with open(self.history_file, 'w', encoding='utf-8') as file:
+            json.dump(history, file, ensure_ascii=False, indent=4)
+
+
+=== output.txt ===
+
+=== ## ia chat.txt ===
+## ia chat
+Estamos discutindo um projeto e organizando as ideias. Estamos criando um programa resumidor com Yan, que será semelhante a um navegador com várias abas. A primeira aba resumirá vídeos do YouTube que inserirmos, trazendo a transcrição e a opção de resumir. A segunda aba resumirá vídeos offline que já temos no computador. A terceira aba será um resumidor de PDF, com um chat para resumir ou fazer perguntas sobre o arquivo. Todas as abas terão um chat. O programa usará inteligência artificial da Meta. Já tenho parte do código funcionando e um protótipo em wxPython. Precisamos organizar as ideias para começar a implementar o programa com os requisitos mencionados. 
+
+Para organizar as ideias, podemos estruturar o projeto em etapas claras e definir os requisitos de cada aba. Esta é uma proposta inicial: 
+
+Estrutura do Programa 
+Interface Principal (wxPython) com múltiplas abas, cada uma com funcionalidades específicas. Um layout intuitivo e responsivo para facilitar a navegação, além de um chat integrado em todas as abas. 
+
+Funcionalidades por Aba 
+Para a aba de resumir vídeos do YouTube, haverá um campo para inserir o link do vídeo. O sistema fará o download automático das legendas e exibirá a transcrição, com um botão para resumir a transcrição com a IA e chat para interagir. A aba de vídeos offline permitirá carregar arquivos de vídeo do computador, extraindo áudio e fazendo a transcrição, que também poderá ser resumida com a IA. Na aba de PDFs, será possível carregar arquivos, visualizar o conteúdo, gerar um resumo com a IA e fazer perguntas ou refinar o resumo através do chat. 
+
+O programa terá inteligência artificial integrada ao modelo da Meta para processar e resumir textos, com chat similar ao GPT em todas as abas. A estrutura do código será modular, com a interface e cada aba separadamente. Um módulo específico será designado para cada função. 
+
+Os próximos passos incluem definir o layout da interface, finalizar os requisitos e as entradas/saídas para cada aba, estruturar os módulos para processar os dados, integrar a IA da Meta para o chat e os resumos, e testar a interação entre as abas e a IA. 
+
+Vamos fazer em orientado objeto e dividir em fases. Monte para mim apenas o front-end do programa em wxPython. E monte uma árvore binária dos arquivos main do programa. Explique a lógica que vamos abordar. Explique para mim onde ficará mais ou menos cada função, como vamos dividir. Se vamos programar cada aba para alguma coisa ou se vamos dividir, tem funções. Cada página de código executa uma função e assim por diante. 
+
+Adotaremos uma abordagem orientada a objetos e dividiremos o programa em classes para cada aba. A janela principal (MainFrame) gerenciará as abas, que serão instâncias de classes separadas. 
+
+Árvore binária dos arquivos principais do programa: 
+Main. py 
+├── YouTubePage. py 
+├── OfflineVideoPage. py 
+├── PDFPage. py 
+├── ChatHandler. py 
+├── Utils/ 
+│ ├── YouTubeUtils. py 
+│ ├── VideoUtils. py 
+│ ├── PDFUtils. py 
+│ ├── AIUtils. py 
+└── Assets/ 
+├── Icons/ 
+├── Themes/ 
+
+A janela principal é responsável por criá-la e gerenciar as abas. Cada aba terá suas próprias funções de front-end com chamadas a funções nos arquivos da pasta Utils. As funções do chat estarão centralizadas em ChatHandler. py. 
+
+O programa será modular, onde cada aba trata apenas da interface e chamadas a funções, deixando o processamento para as funções utilitárias. Quando uma nova aba for adicionada, bastará criar uma nova classe e módulo utilitário correspondente. 
+
+Em relação ao código do front-end em wxPython, a estrutura inicial inclui a criação da janela principal e as abas para vídeos do YouTube, vídeos offline e PDFs, cada uma com um layout básico de botões e campos de input. 
+
+Nos próximos passos, precisamos dividir o código em arquivos separados, criar módulos utilitários e integrar a lógica do chat nas abas. Também é essencial testar o protótipo com dados reais e ajustar a interface.
+
+
+vamos começar pela aba do youtube 
+esse é o código que eu já tenho funcionando
+
+
+
+import wx
+import requests
+import json
+import threading
+import time
+
+# Configuração da API
+API_URL = "http://localhost:11434/v1/chat/completions"
+MODEL_NAME = "gemma2:2b"  # Alterado para o modelo correto
+
+class ChatApp(wx.Frame):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # Configurar a interface
+        self.SetTitle("Chat com IA")
+        self.SetSize((600, 400))
+        panel = wx.Panel(self)
+
+        vbox = wx.BoxSizer(wx.VERTICAL)
+
+        # Substituir painel simples por ScrolledWindow
+        self.history = wx.ScrolledWindow(panel, size=(-1, 300), style=wx.VSCROLL | wx.ALWAYS_SHOW_SB)
+        self.history.SetBackgroundColour(wx.Colour(240, 240, 240))  # Cor de fundo para o painel
+        self.history.SetScrollRate(5, 5)
+        self.history_sizer = wx.BoxSizer(wx.VERTICAL)
+        self.history.SetSizer(self.history_sizer)
+        vbox.Add(self.history, proportion=1, flag=wx.EXPAND | wx.ALL, border=5)
+
+        hbox = wx.BoxSizer(wx.HORIZONTAL)
+        self.input_box = wx.TextCtrl(panel, size=(-1, 30))
+        hbox.Add(self.input_box, proportion=1, flag=wx.EXPAND | wx.ALL, border=5)
+
+        send_btn = wx.Button(panel, label="Enviar")
+        send_btn.Bind(wx.EVT_BUTTON, self.send_message)
+        hbox.Add(send_btn, flag=wx.ALL, border=5)
+
+        vbox.Add(hbox, flag=wx.EXPAND)
+        panel.SetSizer(vbox)
+
+        self.Show()
+
+    def add_message(self, message, is_user=True, update_last=False):
+        """Adiciona uma mensagem ao painel de histórico."""
+        if update_last and self.history_sizer.GetChildren():
+            # Atualiza o último painel em vez de criar um novo
+            last_panel = self.history_sizer.GetChildren()[-1].GetWindow()
+            last_text = last_panel.GetChildren()[0]
+            last_text.SetLabel(message)
+            last_text.Wrap(self.GetSize()[0] - 50)
+            self.history.Layout()
+            self.history.Scroll(-1, self.history.GetVirtualSize()[1])
+            return
+
+        message_panel = wx.Panel(self.history, size=(-1, -1))
+        message_sizer = wx.BoxSizer(wx.HORIZONTAL)
+
+        # Estilo e cores diferentes para usuário e IA
+        bg_color = wx.Colour(200, 230, 201) if is_user else wx.Colour(187, 222, 251)
+        text_color = wx.Colour(0, 0, 0)
+
+        message_text = wx.StaticText(message_panel, label=message, style=wx.ALIGN_LEFT)
+        message_text.Wrap(self.GetSize()[0] - 50)  # Ajuste de largura para o texto
+        message_text.SetBackgroundColour(bg_color)
+        message_text.SetForegroundColour(text_color)
+
+        # Adicionar funcionalidade de cópia
+        message_text.Bind(wx.EVT_RIGHT_DOWN, self.copy_message)
+
+        # Ajustar alinhamento baseado no tipo de mensagem
+        if is_user:
+            message_sizer.AddStretchSpacer()
+            message_sizer.Add(message_text, flag=wx.EXPAND | wx.ALL, border=5)
+        else:
+            message_sizer.Add(message_text, flag=wx.EXPAND | wx.ALL, border=5)
+            message_sizer.AddStretchSpacer()
+
+        message_panel.SetSizer(message_sizer)
+        self.history_sizer.Add(message_panel, flag=wx.EXPAND | wx.ALL, border=5)
+        self.history.Layout()
+        self.history.Scroll(-1, self.history.GetVirtualSize()[1])
+
+    def send_message(self, event):
+        user_message = self.input_box.GetValue().strip()
+        if not user_message:
+            return
+
+        # Exibir mensagem do usuário na interface
+        self.add_message(f"Você: {user_message}", is_user=True)
+        self.input_box.Clear()
+
+        # Enviar mensagem para a API em uma thread separada
+        thread = threading.Thread(target=self.handle_ai_response, args=(user_message,))
+        thread.start()
+
+    def handle_ai_response(self, user_message):
+        try:
+            response = self.query_ai(user_message)
+            ai_response = response.get("choices", [{}])[0].get("message", {}).get("content", "Sem resposta.")
+            self.display_dynamic_ai_message(ai_response)
+        except Exception as e:
+            wx.CallAfter(self.add_message, f"Erro: {str(e)}", is_user=False)
+
+    def display_dynamic_ai_message(self, full_message):
+        """Exibe a mensagem da IA gradualmente, simulando o carregamento."""
+        current_message = "IA: "
+        wx.CallAfter(self.add_message, current_message, is_user=False)
+
+        for char in full_message:
+            current_message += char
+            wx.CallAfter(self.add_message, current_message, is_user=False, update_last=True)
+            time.sleep(0.02)  # Simula a geração gradual de texto
+
+    def query_ai(self, message):
+        payload = {
+            "model": MODEL_NAME,
+            "messages": [
+                {"role": "system", "content": "Você é um assistente útil."},
+                {"role": "user", "content": message}
+            ]
+        }
+        headers = {"Content-Type": "application/json"}
+        response = requests.post(API_URL, headers=headers, data=json.dumps(payload))
+        response.raise_for_status()
+        return response.json()
+
+    def copy_message(self, event):
+        """Permite copiar o texto da mensagem clicada com o botão direito."""
+        widget = event.GetEventObject()
+        if isinstance(widget, wx.StaticText):
+            text_to_copy = widget.GetLabel()
+            if wx.TheClipboard.Open():
+                wx.TheClipboard.SetData(wx.TextDataObject(text_to_copy))
+                wx.TheClipboard.Close()
+
+if __name__ == "__main__":
+    app = wx.App(False)
+    frame = ChatApp(None)
+    app.MainLoop()
+
+e tenho esse código do chat que conversa com a IA
+
+import wx
+import requests
+import json
+import threading
+import time
+
+# Configuração da API
+API_URL = "http://localhost:11434/v1/chat/completions"
+MODEL_NAME = "gemma2:2b"  # Alterado para o modelo correto
+
+class ChatApp(wx.Frame):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # Configurar a interface
+        self.SetTitle("Chat com IA")
+        self.SetSize((600, 400))
+        panel = wx.Panel(self)
+
+        vbox = wx.BoxSizer(wx.VERTICAL)
+
+        # Substituir painel simples por ScrolledWindow
+        self.history = wx.ScrolledWindow(panel, size=(-1, 300), style=wx.VSCROLL | wx.ALWAYS_SHOW_SB)
+        self.history.SetBackgroundColour(wx.Colour(240, 240, 240))  # Cor de fundo para o painel
+        self.history.SetScrollRate(5, 5)
+        self.history_sizer = wx.BoxSizer(wx.VERTICAL)
+        self.history.SetSizer(self.history_sizer)
+        vbox.Add(self.history, proportion=1, flag=wx.EXPAND | wx.ALL, border=5)
+
+        hbox = wx.BoxSizer(wx.HORIZONTAL)
+        self.input_box = wx.TextCtrl(panel, size=(-1, 30))
+        hbox.Add(self.input_box, proportion=1, flag=wx.EXPAND | wx.ALL, border=5)
+
+        send_btn = wx.Button(panel, label="Enviar")
+        send_btn.Bind(wx.EVT_BUTTON, self.send_message)
+        hbox.Add(send_btn, flag=wx.ALL, border=5)
+
+        vbox.Add(hbox, flag=wx.EXPAND)
+        panel.SetSizer(vbox)
+
+        self.Show()
+
+    def add_message(self, message, is_user=True, update_last=False):
+        """Adiciona uma mensagem ao painel de histórico."""
+        if update_last and self.history_sizer.GetChildren():
+            # Atualiza o último painel em vez de criar um novo
+            last_panel = self.history_sizer.GetChildren()[-1].GetWindow()
+            last_text = last_panel.GetChildren()[0]
+            last_text.SetLabel(message)
+            last_text.Wrap(self.GetSize()[0] - 50)
+            self.history.Layout()
+            self.history.Scroll(-1, self.history.GetVirtualSize()[1])
+            return
+
+        message_panel = wx.Panel(self.history, size=(-1, -1))
+        message_sizer = wx.BoxSizer(wx.HORIZONTAL)
+
+        # Estilo e cores diferentes para usuário e IA
+        bg_color = wx.Colour(200, 230, 201) if is_user else wx.Colour(187, 222, 251)
+        text_color = wx.Colour(0, 0, 0)
+
+        message_text = wx.StaticText(message_panel, label=message, style=wx.ALIGN_LEFT)
+        message_text.Wrap(self.GetSize()[0] - 50)  # Ajuste de largura para o texto
+        message_text.SetBackgroundColour(bg_color)
+        message_text.SetForegroundColour(text_color)
+
+        # Adicionar funcionalidade de cópia
+        message_text.Bind(wx.EVT_RIGHT_DOWN, self.copy_message)
+
+        # Ajustar alinhamento baseado no tipo de mensagem
+        if is_user:
+            message_sizer.AddStretchSpacer()
+            message_sizer.Add(message_text, flag=wx.EXPAND | wx.ALL, border=5)
+        else:
+            message_sizer.Add(message_text, flag=wx.EXPAND | wx.ALL, border=5)
+            message_sizer.AddStretchSpacer()
+
+        message_panel.SetSizer(message_sizer)
+        self.history_sizer.Add(message_panel, flag=wx.EXPAND | wx.ALL, border=5)
+        self.history.Layout()
+        self.history.Scroll(-1, self.history.GetVirtualSize()[1])
+
+    def send_message(self, event):
+        user_message = self.input_box.GetValue().strip()
+        if not user_message:
+            return
+
+        # Exibir mensagem do usuário na interface
+        self.add_message(f"Você: {user_message}", is_user=True)
+        self.input_box.Clear()
+
+        # Enviar mensagem para a API em uma thread separada
+        thread = threading.Thread(target=self.handle_ai_response, args=(user_message,))
+        thread.start()
+
+    def handle_ai_response(self, user_message):
+        try:
+            response = self.query_ai(user_message)
+            ai_response = response.get("choices", [{}])[0].get("message", {}).get("content", "Sem resposta.")
+            self.display_dynamic_ai_message(ai_response)
+        except Exception as e:
+            wx.CallAfter(self.add_message, f"Erro: {str(e)}", is_user=False)
+
+    def display_dynamic_ai_message(self, full_message):
+        """Exibe a mensagem da IA gradualmente, simulando o carregamento."""
+        current_message = "IA: "
+        wx.CallAfter(self.add_message, current_message, is_user=False)
+
+        for char in full_message:
+            current_message += char
+            wx.CallAfter(self.add_message, current_message, is_user=False, update_last=True)
+            time.sleep(0.02)  # Simula a geração gradual de texto
+
+    def query_ai(self, message):
+        payload = {
+            "model": MODEL_NAME,
+            "messages": [
+                {"role": "system", "content": "Você é um assistente útil."},
+                {"role": "user", "content": message}
+            ]
+        }
+        headers = {"Content-Type": "application/json"}
+        response = requests.post(API_URL, headers=headers, data=json.dumps(payload))
+        response.raise_for_status()
+        return response.json()
+
+    def copy_message(self, event):
+        """Permite copiar o texto da mensagem clicada com o botão direito."""
+        widget = event.GetEventObject()
+        if isinstance(widget, wx.StaticText):
+            text_to_copy = widget.GetLabel()
+            if wx.TheClipboard.Open():
+                wx.TheClipboard.SetData(wx.TextDataObject(text_to_copy))
+                wx.TheClipboard.Close()
+
+if __name__ == "__main__":
+    app = wx.App(False)
+    frame = ChatApp(None)
+    app.MainLoop()
+
+
+
+
+
+
+
+=== 0.txt ===
+## ia chat
+Estamos discutindo um projeto e organizando as ideias. Estamos criando um programa resumidor com Yan, que será semelhante a um navegador com várias abas. A primeira aba resumirá vídeos do YouTube que inserirmos, trazendo a transcrição e a opção de resumir. A segunda aba resumirá vídeos offline que já temos no computador. A terceira aba será um resumidor de PDF, com um chat para resumir ou fazer perguntas sobre o arquivo. Todas as abas terão um chat. O programa usará inteligência artificial da Meta. Já tenho parte do código funcionando e um protótipo em wxPython. Precisamos organizar as ideias para começar a implementar o programa com os requisitos mencionados. 
+
+Para organizar as ideias, podemos estruturar o projeto em etapas claras e definir os requisitos de cada aba. Esta é uma proposta inicial: 
+
+Estrutura do Programa 
+Interface Principal (wxPython) com múltiplas abas, cada uma com funcionalidades específicas. Um layout intuitivo e responsivo para facilitar a navegação, além de um chat integrado em todas as abas. 
+
+Funcionalidades por Aba 
+Para a aba de resumir vídeos do YouTube, haverá um campo para inserir o link do vídeo. O sistema fará o download automático das legendas e exibirá a transcrição, com um botão para resumir a transcrição com a IA e chat para interagir. A aba de vídeos offline permitirá carregar arquivos de vídeo do computador, extraindo áudio e fazendo a transcrição, que também poderá ser resumida com a IA. Na aba de PDFs, será possível carregar arquivos, visualizar o conteúdo, gerar um resumo com a IA e fazer perguntas ou refinar o resumo através do chat. 
+
+O programa terá inteligência artificial integrada ao modelo da Meta para processar e resumir textos, com chat similar ao GPT em todas as abas. A estrutura do código será modular, com a interface e cada aba separadamente. Um módulo específico será designado para cada função. 
+
+Os próximos passos incluem definir o layout da interface, finalizar os requisitos e as entradas/saídas para cada aba, estruturar os módulos para processar os dados, integrar a IA da Meta para o chat e os resumos, e testar a interação entre as abas e a IA. 
+
+Vamos fazer em orientado objeto e dividir em fases. Monte para mim apenas o front-end do programa em wxPython. E monte uma árvore binária dos arquivos main do programa. Explique a lógica que vamos abordar. Explique para mim onde ficará mais ou menos cada função, como vamos dividir. Se vamos programar cada aba para alguma coisa ou se vamos dividir, tem funções. Cada página de código executa uma função e assim por diante. 
+
+Adotaremos uma abordagem orientada a objetos e dividiremos o programa em classes para cada aba. A janela principal (MainFrame) gerenciará as abas, que serão instâncias de classes separadas. 
+
+Árvore binária dos arquivos principais do programa: 
+Main. py 
+├── YouTubePage. py 
+├── OfflineVideoPage. py 
+├── PDFPage. py 
+├── ChatHandler. py 
+├── Utils/ 
+│ ├── YouTubeUtils. py 
+│ ├── VideoUtils. py 
+│ ├── PDFUtils. py 
+│ ├── AIUtils. py 
+└── Assets/ 
+├── Icons/ 
+├── Themes/ 
+
+A janela principal é responsável por criá-la e gerenciar as abas. Cada aba terá suas próprias funções de front-end com chamadas a funções nos arquivos da pasta Utils. As funções do chat estarão centralizadas em ChatHandler. py. 
+
+O programa será modular, onde cada aba trata apenas da interface e chamadas a funções, deixando o processamento para as funções utilitárias. Quando uma nova aba for adicionada, bastará criar uma nova classe e módulo utilitário correspondente. 
+
+Em relação ao código do front-end em wxPython, a estrutura inicial inclui a criação da janela principal e as abas para vídeos do YouTube, vídeos offline e PDFs, cada uma com um layout básico de botões e campos de input. 
+
+Nos próximos passos, precisamos dividir o código em arquivos separados, criar módulos utilitários e integrar a lógica do chat nas abas. Também é essencial testar o protótipo com dados reais e ajustar a interface.
+
+
+vamos começar pela aba do youtube 
+esse é o código que eu já tenho funcionando
+
+```
+import wx
+import yt_dlp
+import re
+import os
+from wx.lib.pubsub import pub
+import threading
+
+class SubtitleApp(wx.Frame):
+    def __init__(self, parent, title):
+        super(SubtitleApp, self).__init__(parent, title=title, size=(800, 600))
+
+        self.InitUI()
+        self.Centre()
+        self.Show()
+
+    def InitUI(self):
+        panel = wx.Panel(self)
+        vbox = wx.BoxSizer(wx.VERTICAL)
+
+        # Linha para URL e botão "Colar"
+        hbox1 = wx.BoxSizer(wx.HORIZONTAL)
+        self.url_label = wx.StaticText(panel, label="URL do Vídeo:")
+        hbox1.Add(self.url_label, flag=wx.RIGHT, border=8)
+        self.url_text = wx.TextCtrl(panel)
+        hbox1.Add(self.url_text, proportion=1)
+        
+        self.paste_button = wx.Button(panel, label="Colar")
+        self.paste_button.Bind(wx.EVT_BUTTON, self.OnPaste)
+        hbox1.Add(self.paste_button, flag=wx.LEFT, border=8)
+        
+        vbox.Add(hbox1, flag=wx.EXPAND | wx.LEFT | wx.RIGHT | wx.TOP, border=10)
+
+        # Botões principais e barra de progresso
+        hbox2 = wx.BoxSizer(wx.HORIZONTAL)
+
+        # Alinhado à esquerda
+        left_box = wx.BoxSizer(wx.HORIZONTAL)
+        self.process_button = wx.Button(panel, label="Processar")
+        self.process_button.Bind(wx.EVT_BUTTON, self.OnProcess)
+        left_box.Add(self.process_button)
+
+        self.clear_button = wx.Button(panel, label="Limpar")
+        self.clear_button.Bind(wx.EVT_BUTTON, self.OnClear)
+        left_box.Add(self.clear_button, flag=wx.LEFT | wx.RIGHT, border=5)
+
+        self.copy_button = wx.Button(panel, label="Copiar")
+        self.copy_button.Bind(wx.EVT_BUTTON, self.OnCopy)
+        left_box.Add(self.copy_button, flag=wx.LEFT | wx.RIGHT, border=5)
+
+        self.summarize_button = wx.Button(panel, label="Resumir")
+        self.summarize_button.Bind(wx.EVT_BUTTON, self.OnSummarize)
+        left_box.Add(self.summarize_button, flag=wx.LEFT | wx.RIGHT, border=5)
+
+        self.progress_bar = wx.Gauge(panel, range=100, size=(250, 25))
+        left_box.Add(self.progress_bar, flag=wx.LEFT, border=10)
+
+        hbox2.Add(left_box, flag=wx.ALIGN_LEFT)
+        vbox.Add(hbox2, flag=wx.EXPAND | wx.TOP | wx.BOTTOM, border=10)
+
+        # Caixa de texto para texto processado
+        hbox3 = wx.BoxSizer(wx.HORIZONTAL)
+
+        # Tela original de texto
+        self.text_ctrl = wx.TextCtrl(panel, style=wx.TE_MULTILINE | wx.TE_READONLY)
+        hbox3.Add(self.text_ctrl, proportion=1, flag=wx.EXPAND | wx.ALL, border=5)
+
+        # Nova tela para resumo
+        self.summary_ctrl = wx.TextCtrl(panel, style=wx.TE_MULTILINE | wx.TE_READONLY)
+        hbox3.Add(self.summary_ctrl, proportion=1, flag=wx.EXPAND | wx.ALL, border=5)
+
+        vbox.Add(hbox3, proportion=1, flag=wx.EXPAND)
+
+        # Contador de palavras para o texto original
+        self.word_count_label = wx.StaticText(panel, label="Palavras: 0")
+        vbox.Add(self.word_count_label, flag=wx.ALIGN_RIGHT | wx.RIGHT | wx.BOTTOM, border=10)
+
+        # Contador de palavras para o resumo
+        self.summary_word_count_label = wx.StaticText(panel, label="Palavras (Resumo): 0")
+        vbox.Add(self.summary_word_count_label, flag=wx.ALIGN_RIGHT | wx.RIGHT | wx.BOTTOM, border=10)
+
+        panel.SetSizer(vbox)
+
+    def OnPaste(self, event):
+        """Cola o conteúdo da área de transferência na URL e limpa o campo antes."""
+        if wx.TheClipboard.Open():
+            if wx.TheClipboard.IsSupported(wx.DataFormat(wx.DF_TEXT)):
+                data = wx.TextDataObject()
+                wx.TheClipboard.GetData(data)
+                self.url_text.SetValue(data.GetText())
+            wx.TheClipboard.Close()
+
+    def OnProcess(self, event):
+        """Inicia o processamento do vídeo."""
+        video_url = self.url_text.GetValue()
+        if not video_url:
+            wx.MessageBox("Por favor, insira uma URL do vídeo.", "Erro", wx.ICON_ERROR)
+            return
+
+        self.progress_bar.SetValue(10)  # Atualiza a barra de progresso
+
+        def run():
+            subtitle_file = download_subtitles(video_url)
+            if subtitle_file:
+                self.progress_bar.SetValue(70)
+                consolidated_file = clean_and_consolidate_subtitles(subtitle_file)
+                self.progress_bar.SetValue(100)
+                if consolidated_file:
+                    with open(consolidated_file, 'r', encoding='utf-8') as file:
+                        content = file.read()
+                    wx.CallAfter(self.text_ctrl.SetValue, content)
+
+                    # Contar palavras e atualizar o contador
+                    word_count = len(content.split())
+                    wx.CallAfter(self.word_count_label.SetLabel, f"Palavras: {word_count}")
+                else:
+                    wx.CallAfter(wx.MessageBox, "Erro ao consolidar as legendas.", "Erro", wx.ICON_ERROR)
+            else:
+                wx.CallAfter(wx.MessageBox, "Não foi possível obter as legendas.", "Erro", wx.ICON_ERROR)
+
+        thread = threading.Thread(target=run)
+        thread.start()
+
+    def OnClear(self, event):
+        """Limpa todos os campos."""
+        self.url_text.SetValue("")
+        self.text_ctrl.SetValue("")
+        self.summary_ctrl.SetValue("")
+        self.progress_bar.SetValue(0)
+        self.word_count_label.SetLabel("Palavras: 0")
+
+    def OnCopy(self, event):
+        """Copia o texto processado para a área de transferência."""
+        text = self.text_ctrl.GetValue()
+        if text:
+            if wx.TheClipboard.Open():
+                wx.TheClipboard.SetData(wx.TextDataObject(text))
+                wx.TheClipboard.Close()
+                wx.MessageBox("Texto copiado com sucesso!", "Informação", wx.ICON_INFORMATION)
+        else:
+            wx.MessageBox("Nada para copiar.", "Erro", wx.ICON_ERROR)
+
+    def OnSummarize(self, event):
+        """Evento para resumir o texto (a funcionalidade será implementada depois)."""
+        wx.MessageBox("Função de resumo ainda não implementada.", "Informação", wx.ICON_INFORMATION)
+
+        # Exemplo de como contar palavras no texto resumido (após implementar o resumo)
+        summary_content = self.summary_ctrl.GetValue()  # Texto do resumo
+        summary_word_count = len(summary_content.split())
+        self.summary_word_count_label.SetLabel(f"Palavras (Resumo): {summary_word_count}")
+
+# Funções auxiliares para download e processamento de legendas
+def download_subtitles(video_url):
+    ydl_opts = {
+        'writesubtitles': True,
+        'writeautomaticsub': True,
+        'subtitleslangs': ['pt', 'pt-br'],
+        'skip_download': True,
+        'quiet': False
+    }
+
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        try:
+            result = ydl.extract_info(video_url, download=False)
+            subtitle_file = None
+
+            if 'requested_subtitles' in result:
+                subtitle_file = ydl.prepare_filename(result)
+                subtitle_file = subtitle_file.rsplit('.', 1)[0] + '.pt.vtt'
+                ydl.download([video_url])
+                print(f"Legendas baixadas para: {subtitle_file}")
+            else:
+                print("Nenhuma legenda em português disponível.")
+            return subtitle_file
+        except Exception as e:
+            print(f"Erro ao baixar legendas: {e}")
+            return None
+
+def clean_and_consolidate_subtitles(subtitle_file):
+    try:
+        with open(subtitle_file, 'r', encoding='utf-8') as file:
+            content = file.read()
+
+        content = re.sub(r'(WEBVTT|Kind:.*|Language:.*)', '', content)
+        content = re.sub(r'\d{2}:\d{2}:\d{2}\.\d{3} --> .*?\n', '', content)
+        content = re.sub(r'<.*?>', '', content)
+        content = re.sub(r'&nbsp;', ' ', content)
+        content = re.sub(r'align:start position:\d+%|\n+', '\n', content).strip()
+
+        lines = content.splitlines()
+        unique_lines = list(dict.fromkeys(line.strip() for line in lines if line.strip()))
+
+        consolidated_text = '\n'.join(unique_lines).strip()
+
+        cleaned_filename = subtitle_file.replace('.vtt', '_consolidated.txt')
+        with open(cleaned_filename, 'w', encoding='utf-8') as file:
+            file.write(consolidated_text)
+
+        print(f"Texto consolidado salvo em: {cleaned_filename}")
+        return cleaned_filename
+    except Exception as e:
+        print(f"Erro ao limpar e consolidar as legendas: {e}")
+        return None
+
+if __name__ == "__main__":
+    app = wx.App()
+    SubtitleApp(None, title="Transcrição e Resumo de Vídeos do YouTube")
+    app.MainLoop()
+
+```
+
+e tenho esse código do chat que conversa com a IA
+
+```
+import wx
+import requests
+import json
+import threading
+import time
+
+# Configuração da API
+API_URL = "http://localhost:11434/v1/chat/completions"
+MODEL_NAME = "gemma2:2b"  # Alterado para o modelo correto
+
+class ChatApp(wx.Frame):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # Configurar a interface
+        self.SetTitle("Chat com IA")
+        self.SetSize((600, 400))
+        panel = wx.Panel(self)
+
+        vbox = wx.BoxSizer(wx.VERTICAL)
+
+        # Substituir painel simples por ScrolledWindow
+        self.history = wx.ScrolledWindow(panel, size=(-1, 300), style=wx.VSCROLL | wx.ALWAYS_SHOW_SB)
+        self.history.SetBackgroundColour(wx.Colour(240, 240, 240))  # Cor de fundo para o painel
+        self.history.SetScrollRate(5, 5)
+        self.history_sizer = wx.BoxSizer(wx.VERTICAL)
+        self.history.SetSizer(self.history_sizer)
+        vbox.Add(self.history, proportion=1, flag=wx.EXPAND | wx.ALL, border=5)
+
+        hbox = wx.BoxSizer(wx.HORIZONTAL)
+        self.input_box = wx.TextCtrl(panel, size=(-1, 30))
+        hbox.Add(self.input_box, proportion=1, flag=wx.EXPAND | wx.ALL, border=5)
+
+        send_btn = wx.Button(panel, label="Enviar")
+        send_btn.Bind(wx.EVT_BUTTON, self.send_message)
+        hbox.Add(send_btn, flag=wx.ALL, border=5)
+
+        vbox.Add(hbox, flag=wx.EXPAND)
+        panel.SetSizer(vbox)
+
+        self.Show()
+
+    def add_message(self, message, is_user=True, update_last=False):
+        """Adiciona uma mensagem ao painel de histórico."""
+        if update_last and self.history_sizer.GetChildren():
+            # Atualiza o último painel em vez de criar um novo
+            last_panel = self.history_sizer.GetChildren()[-1].GetWindow()
+            last_text = last_panel.GetChildren()[0]
+            last_text.SetLabel(message)
+            last_text.Wrap(self.GetSize()[0] - 50)
+            self.history.Layout()
+            self.history.Scroll(-1, self.history.GetVirtualSize()[1])
+            return
+
+        message_panel = wx.Panel(self.history, size=(-1, -1))
+        message_sizer = wx.BoxSizer(wx.HORIZONTAL)
+
+        # Estilo e cores diferentes para usuário e IA
+        bg_color = wx.Colour(200, 230, 201) if is_user else wx.Colour(187, 222, 251)
+        text_color = wx.Colour(0, 0, 0)
+
+        message_text = wx.StaticText(message_panel, label=message, style=wx.ALIGN_LEFT)
+        message_text.Wrap(self.GetSize()[0] - 50)  # Ajuste de largura para o texto
+        message_text.SetBackgroundColour(bg_color)
+        message_text.SetForegroundColour(text_color)
+
+        # Adicionar funcionalidade de cópia
+        message_text.Bind(wx.EVT_RIGHT_DOWN, self.copy_message)
+
+        # Ajustar alinhamento baseado no tipo de mensagem
+        if is_user:
+            message_sizer.AddStretchSpacer()
+            message_sizer.Add(message_text, flag=wx.EXPAND | wx.ALL, border=5)
+        else:
+            message_sizer.Add(message_text, flag=wx.EXPAND | wx.ALL, border=5)
+            message_sizer.AddStretchSpacer()
+
+        message_panel.SetSizer(message_sizer)
+        self.history_sizer.Add(message_panel, flag=wx.EXPAND | wx.ALL, border=5)
+        self.history.Layout()
+        self.history.Scroll(-1, self.history.GetVirtualSize()[1])
+
+    def send_message(self, event):
+        user_message = self.input_box.GetValue().strip()
+        if not user_message:
+            return
+
+        # Exibir mensagem do usuário na interface
+        self.add_message(f"Você: {user_message}", is_user=True)
+        self.input_box.Clear()
+
+        # Enviar mensagem para a API em uma thread separada
+        thread = threading.Thread(target=self.handle_ai_response, args=(user_message,))
+        thread.start()
+
+    def handle_ai_response(self, user_message):
+        try:
+            response = self.query_ai(user_message)
+            ai_response = response.get("choices", [{}])[0].get("message", {}).get("content", "Sem resposta.")
+            self.display_dynamic_ai_message(ai_response)
+        except Exception as e:
+            wx.CallAfter(self.add_message, f"Erro: {str(e)}", is_user=False)
+
+    def display_dynamic_ai_message(self, full_message):
+        """Exibe a mensagem da IA gradualmente, simulando o carregamento."""
+        current_message = "IA: "
+        wx.CallAfter(self.add_message, current_message, is_user=False)
+
+        for char in full_message:
+            current_message += char
+            wx.CallAfter(self.add_message, current_message, is_user=False, update_last=True)
+            time.sleep(0.02)  # Simula a geração gradual de texto
+
+    def query_ai(self, message):
+        payload = {
+            "model": MODEL_NAME,
+            "messages": [
+                {"role": "system", "content": "Você é um assistente útil."},
+                {"role": "user", "content": message}
+            ]
+        }
+        headers = {"Content-Type": "application/json"}
+        response = requests.post(API_URL, headers=headers, data=json.dumps(payload))
+        response.raise_for_status()
+        return response.json()
+
+    def copy_message(self, event):
+        """Permite copiar o texto da mensagem clicada com o botão direito."""
+        widget = event.GetEventObject()
+        if isinstance(widget, wx.StaticText):
+            text_to_copy = widget.GetLabel()
+            if wx.TheClipboard.Open():
+                wx.TheClipboard.SetData(wx.TextDataObject(text_to_copy))
+                wx.TheClipboard.Close()
+
+if __name__ == "__main__":
+    app = wx.App(False)
+    frame = ChatApp(None)
+    app.MainLoop()
+
+```
+
+=== ajuda.txt ===
+Estamos discutindo um projeto para criar um programa resumidor. Ele terá várias abas: uma para resumir vídeos do YouTube, outra para vídeos offline e uma terceira para PDFs, todas com chat integrados. O programa usará inteligência artificial da Meta. Um protótipo está em wxPython, e agora estamos pensando em estruturar o projeto em etapas.
+
+A estrutura do programa deve ser voltada para uma interface intuitiva com múltiplas abas. Cada aba terá funcionalidades específicas, como resumir vídeos e PDFs. A ideia é usar um framework como Flask ou FastAPI para criar uma API que conecte a interface da web ao backend em Python. A estrutura em árvore binária será usada para organizar os arquivos, incluindo classes específicas para cada aba e módulos utilitários.
+
+Cada aba será uma classe responsável por sua interface e funções, como baixar legendas ou extrair texto de PDFs, enquanto um módulo de chat gerenciará a comunicação em todas as abas. A lógica será modular, delegando processamento pesado a funções utilitárias. Para a primeira fase, precisamos adaptar o código existente para que a lógica do chat e das interações fique no backend e implementar o front-end em HTML, CSS e JavaScript.
+
+A proposta inclui uma divisão em módulos: frontend, que conterá os arquivos da interface; e backend, que lidará com a lógica do programa. A comunicação entre o front-end e o back-end será feita por chamadas de API. O próximo passo é criar a interface básica em HTML, CSS e JavaScript e integrar com o Flask. O código será desenvolvido de forma gradual, começando do básico e evoluindo conforme necessário.
+
+Atualmente, estamos prontos para iniciar a estrutura do arquivo principal, o Main. py, que gerenciará o servidor e rotas. Depois, podemos avançar para as abas específicas, definindo suas funcionalidades em arquivos separados.
+
+Main.py ├── YouTubePage.py # Esquerda │ ├── Estrutura de aba (HTML, CSS, JS para interface da aba YouTube) │ ├── Funções: carregar transcrição do YouTube, enviar à IA para resumo │ └── Comunica com: YouTubeUtils.py, AIUtils.py ├── OfflineVideoPage.py # Direita │ ├── Estrutura de aba (HTML, CSS, JS para aba de vídeos offline) │ ├── Funções: processar vídeos locais, transcrever e resumir │ └── Comunica com: VideoUtils.py, AIUtils.py ├── PDFPage.py # Esquerda │ ├── Estrutura de aba (HTML, CSS, JS para resumir PDFs) │ ├── Funções: carregar PDFs, extrair texto e resumir │ └── Comunica com: PDFUtils.py, AIUtils.py ├── ChatHandler.py # Direita │ ├── Lida com todas as requisições de chat nas abas │ ├── Estruturação: rotas para API Flask │ └── Comunica com: AIUtils.py └── Utils # Suporte para lógica de negócios ├── YouTubeUtils.py # Esquerda │ ├── Download de legendas, extração de transcrição │ └── APIs YouTube e pré-processamento ├── VideoUtils.py # Direita │ ├── Extração de áudio e texto de vídeos locais │ └── Pré-processamento para IA ├── PDFUtils.py # Esquerda │ ├── Extração de texto de PDFs │ └── Processamento semântico └── AIUtils.py # Direita ├── Comunicação com a IA da Meta (API HTTP ou local) ├── Formatação de mensagens └── Suporte para chats dinâmicos
+
+BLACKBOXAI
+
+A estrutura do seu projeto parece bem organizada e modular, o que é essencial para facilitar o desenvolvimento e a manutenção. Abaixo, apresento uma visão geral de como você pode implementar cada parte do seu projeto, além de algumas sugestões para a implementação das funcionalidades.
+
+Estrutura do Projeto
+plaintext
+
+Verify
+
+Open In Editor
+Run
+Copy code
+Main.py
+├── YouTubePage.py                # Esquerda
+│   ├── Estrutura de aba (HTML, CSS, JS para interface da aba YouTube)
+│   ├── Funções: carregar transcrição do YouTube, enviar à IA para resumo
+│   └── Comunica com: YouTubeUtils.py, AIUtils.py
+├── OfflineVideoPage.py           # Direita
+│   ├── Estrutura de aba (HTML, CSS, JS para aba de vídeos offline)
+│   ├── Funções: processar vídeos locais, transcrever e resumir
+│   └── Comunica com: VideoUtils.py, AIUtils.py
+├── PDFPage.py                    # Esquerda
+│   ├── Estrutura de aba (HTML, CSS, JS para resumir PDFs)
+│   ├── Funções: carregar PDFs, extrair texto e resumir
+│   └── Comunica com: PDFUtils.py, AIUtils.py
+├── ChatHandler.py                # Direita
+│   ├── Lida com todas as requisições de chat nas abas
+│   ├── Estruturação: rotas para API Flask
+│   └── Comunica com: AIUtils.py
+└── Utils                         # Suporte para lógica de negócios
+    ├── YouTubeUtils.py           # Esquerda
+    │   ├── Download de legendas, extração de transcrição
+    │   └── APIs YouTube e pré-processamento
+    ├── VideoUtils.py             # Direita
+    │   ├── Extração de áudio e texto de vídeos locais
+    │   └── Pré-processamento para IA
+    ├── PDFUtils.py               # Esquerda
+    │   ├── Extração de texto de PDFs
+    │   └── Processamento semântico
+    └── AIUtils.py                # Direita
+        ├── Comunicação com a IA da Meta (API HTTP ou local)
+        ├── Formatação de mensagens
+        └── Suporte para chats dinâmicos
+Implementação das Funcionalidades
+Main.py:
+
+Inicialize o servidor Flask e defina as rotas para cada aba.
+Configure a comunicação entre o front-end e o back-end.
+python
+
+Verify
+
+Open In Editor
+Run
+Copy code
+from flask import Flask, render_template
+from YouTubePage import youtube_page
+from OfflineVideoPage import offline_video_page
+from PDFPage import pdf_page
+from ChatHandler import chat_handler
+
+app = Flask(__name__)
+
+app.register_blueprint(youtube_page, url_prefix='/youtube')
+app.register_blueprint(offline_video_page, url_prefix='/offline')
+app.register_blueprint(pdf_page, url_prefix='/pdf')
+app.register_blueprint(chat_handler, url_prefix='/chat')
+
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+if __name__ == '__main__':
+    app.run(debug=True)
+YouTubePage.py:
+
+Crie a estrutura HTML para a aba do YouTube.
+Implemente funções para carregar transcrições e enviar para a IA.
+python
+
+Verify
+
+Open In Editor
+Run
+Copy code
+from flask import Blueprint, render_template, request
+from Utils.YouTubeUtils import download_subtitles
+from Utils.AIUtils import summarize_text
+
+youtube_page = Blueprint('youtube_page', __name__)
+
+@youtube_page.route('/')
+def youtube():
+    return render_template('youtube.html')
+
+@youtube_page.route('/summarize', methods=['POST'])
+def summarize_youtube():
+    video_url = request.form['video_url']
+    subtitles = download_subtitles(video_url)
+    summary = summarize_text(subtitles)
+    return {'summary': summary}
+OfflineVideoPage.py:
+
+Similar à aba do YouTube, mas para vídeos offline.
+Implemente funções para processar vídeos locais.
+python
+
+Verify
+
+Open In Editor
+Run
+Copy code
+from flask import Blueprint, render_template, request
+from Utils.VideoUtils import process_local_video
+from Utils.AIUtils import summarize_text
+
+offline_video_page = Blueprint('offline_video_page', __name__)
+
+@offline_video_page.route('/')
+def offline_video():
+    return render_template('offline_video.html')
+
+@offline_video_page.route('/summarize', methods=['POST'])
+def summarize_offline_video():
+    video_file = request.files['video_file']
+    text = process_local_video(video_file)
+    summary = summarize_text(text)
+    return {'summary
+You
+
+Aqui está o plano básico para o nome de cada arquivo de código e sua função:
+
+Main.py
+
+Inicializa a aplicação e gerencia as rotas principais. Ponto de entrada do programa. YouTubePage.py
+
+Gerencia a lógica para a aba de vídeos do YouTube. Inclui funções para baixar transcrições, processar vídeos e se comunicar com a IA. OfflineVideoPage.py
+
+Gerencia a aba de vídeos offline. Inclui funções para processar arquivos locais e enviar para a IA. PDFPage.py
+
+Gerencia a aba de PDFs. Inclui funções para análise de PDF e interação com a IA. ChatHandler.py
+
+Centraliza toda a lógica do chat em uma classe reutilizável. Trata envio, recebimento e exibição de mensagens. Pasta Utils/: Módulos de Utilitários
+
+YouTubeUtils.py: Funções para download de legendas e transcrições de vídeos do YouTube. VideoUtils.py: Processamento e transcrição de vídeos offline. PDFUtils.py: Extração e tratamento de textos de PDFs. AIUtils.py: Lógica para se comunicar com a IA da Meta. Pasta Assets/: Recursos Visuais
+
+Icons/: Ícones usados no front-end. Themes/: Arquivos CSS e templates HTML.
+
+cria um comando no cmd para eu criar todos os arquivos de código
+
+BLACKBOXAI
+
+Para criar todos os arquivos de código e pastas conforme a estrutura que você descreveu, você pode usar um comando no terminal (cmd) do Windows. Abaixo está um comando que você pode copiar e colar no seu terminal para criar a estrutura de diretórios e arquivos:
+
+cmd
+
+Verify
+
+Open In Editor
+Run
+Copy code
+mkdir MyProject
+cd MyProject
+mkdir Utils Assets Assets\Icons Assets\Themes
+echo "" > Main.py
+echo "" > YouTubePage.py
+echo "" > OfflineVideoPage.py
+echo "" > PDFPage.py
+echo "" > ChatHandler.py
+echo "" > Utils\YouTubeUtils.py
+echo "" > Utils\VideoUtils.py
+echo "" > Utils\PDFUtils.py
+echo "" > Utils\AIUtils.py
+echo "" > Assets\Icons\.gitkeep
+echo "" > Assets\Themes\.gitkeep
+Explicação do Comando:
+mkdir MyProject: Cria uma nova pasta chamada MyProject.
+cd MyProject: Navega para a pasta MyProject.
+mkdir Utils Assets Assets\Icons Assets\Themes: Cria as pastas Utils, Assets, Icons e Themes.
+echo "" > Main.py: Cria um arquivo vazio chamado Main.py.
+echo "" > YouTubePage.py: Cria um arquivo vazio chamado YouTubePage.py.
+echo "" > OfflineVideoPage.py: Cria um arquivo vazio chamado OfflineVideoPage.py.
+echo "" > PDFPage.py: Cria um arquivo vazio chamado PDFPage.py.
+echo "" > ChatHandler.py: Cria um arquivo vazio chamado ChatHandler.py.
+echo "" > Utils\YouTubeUtils.py: Cria um arquivo vazio chamado YouTubeUtils.py na pasta Utils.
+echo "" > Utils\VideoUtils.py: Cria um arquivo vazio chamado VideoUtils.py na pasta Utils.
+echo "" > Utils\PDFUtils.py: Cria um arquivo vazio chamado PDFUtils.py na pasta Utils.
+echo "" > Utils\AIUtils.py: Cria um arquivo vazio chamado AIUtils.py na pasta Utils.
+echo "" > Assets\Icons\.gitkeep: Cria um arquivo .gitkeep na pasta Icons para manter a pasta no controle de versão (opcional).
+echo "" > Assets\Themes\.gitkeep: Cria um arquivo .gitkeep na pasta Themes para manter a pasta no controle de versão (opcional).
+Como Executar:
+Abra o terminal (cmd).
+Cole o comando acima e pressione Enter.
+Isso criará a estrutura de diretórios e arquivos conforme especificado.
+Agora você pode começar a implementar a lógica do seu projeto nos arquivos criados!
+
+You
+
+Eu quero colocar esse comando no arquivo.bat para criar esses arquivos
+
+BLACKBOXAI
+
+Para criar um arquivo .bat que execute os comandos necessários para criar a estrutura de diretórios e arquivos, você pode seguir os passos abaixo:
+
+Abra um editor de texto: Você pode usar o Bloco de Notas ou qualquer outro editor de texto de sua preferência.
+
+Cole o seguinte código no editor:
+
+bat
+
+Verify
+
+Open In Editor
+Run
+Copy code
+@echo off
+mkdir MyProject
+cd MyProject
+mkdir Utils Assets Assets\Icons Assets\Themes
+echo "" > Main.py
+echo "" > YouTubePage.py
+echo "" > OfflineVideoPage.py
+echo "" > PDFPage.py
+echo "" > ChatHandler.py
+echo "" > Utils\YouTubeUtils.py
+echo "" > Utils\VideoUtils.py
+echo "" > Utils\PDFUtils.py
+echo "" > Utils\AIUtils.py
+echo "" > Assets\Icons\.gitkeep
+echo "" > Assets\Themes\.gitkeep
+echo Estrutura de diretórios e arquivos criada com sucesso!
+pause
+Salve o arquivo:
+
+Vá em "Arquivo" > "Salvar como".
+Na caixa de diálogo, escolha um local onde você deseja salvar o arquivo.
+No campo "Nome do arquivo", digite create_structure.bat (ou qualquer nome que você preferir, mas certifique-se de que a extensão seja .bat).
+No campo "Tipo", selecione "Todos os arquivos".
+Clique em "Salvar".
+Execute o arquivo .bat:
+
+Navegue até o local onde você salvou o arquivo create_structure.bat.
+Dê um duplo clique no arquivo para executá-lo.
+O que o arquivo .bat faz:
+@echo off: Desativa a exibição dos comandos no terminal.
+mkdir MyProject: Cria uma nova pasta chamada MyProject.
+cd MyProject: Navega para a pasta MyProject.
+mkdir Utils Assets Assets\Icons Assets\Themes: Cria as pastas Utils, Assets, Icons e Themes.
+echo "" > Main.py: Cria um arquivo vazio chamado Main.py.
+echo "" > YouTubePage.py: Cria um arquivo vazio chamado YouTubePage.py.
+echo "" > OfflineVideoPage.py: Cria um arquivo vazio chamado OfflineVideoPage.py.
+echo "" > PDFPage.py: Cria um arquivo vazio chamado PDFPage.py.
+echo "" > ChatHandler.py: Cria um arquivo vazio chamado ChatHandler.py.
+echo "" > Utils\YouTubeUtils.py: Cria um arquivo vazio chamado YouTubeUtils.py na pasta Utils.
+echo "" > Utils\VideoUtils.py: Cria um arquivo vazio chamado VideoUtils.py na pasta Utils.
+echo "" > Utils\PDFUtils.py: Cria um arquivo vazio chamado PDFUtils.py na pasta Utils.
+echo "" > Utils\AIUtils.py: Cria um arquivo vazio chamado AIUtils.py na pasta Utils.
+echo "" > Assets\Icons\.gitkeep: Cria um arquivo .gitkeep na pasta Icons para manter a pasta no controle de versão (opcional).
+echo "" > Assets\Themes\.gitkeep: Cria um arquivo .gitkeep na pasta Themes para manter a pasta no controle de versão (opcional).
+echo Estrutura de diretórios e arquivos criada com sucesso!: Exibe uma mensagem de sucesso.
+pause: Pausa a execução do script para que você possa ver a mensagem antes de fechar a janela do terminal.
+Agora você tem um arquivo .bat que pode ser executado para criar a estrutura do seu projeto de forma rápida e fácil!
+=== codigo_completo.txt ===
+# Main.py
+import wx
+from YouTubePage import YouTubePage
+
+class MainFrame(wx.Frame):
+    def __init__(self):
+        super().__init__(None, title="Resumidor de Vídeos", size=(800, 600))
+
+        # Criar um notebook para as abas
+        self.notebook = wx.Notebook(self)
+
+        # Adicionar a aba do YouTube
+        self.youtube_page = YouTubePage(self.notebook)
+        self.notebook.AddPage(self.youtube_page, "YouTube")
+
+        # Configurar o layout principal
+        sizer = wx.BoxSizer(wx.VERTICAL)
+        sizer.Add(self.notebook, 1, wx.EXPAND)
+        self.SetSizer(sizer)
+
+        self.Show()
+
+if __name__ == "__main__":
+    app = wx.App(False)
+    frame = MainFrame()
+    app.MainLoop()
+
+# SubtitleProcessor.py
+import yt_dlp
+import re
+import os
+import json
+
+class SubtitleProcessor:
+    def __init__(self):
+        pass
+
+    def download_subtitles(self, video_url):
+        ydl_opts = {
+            'writesubtitles': True,
+            'writeautomaticsub': True,
+            'subtitleslangs': ['pt', 'pt-br'],
+            'skip_download': True,
+            'quiet': False
+        }
+
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            try:
+                result = ydl.extract_info(video_url, download=False)
+                subtitle_file = None
+
+                if 'requested_subtitles' in result:
+                    subtitle_file = ydl.prepare_filename(result)
+                    subtitle_file = subtitle_file.rsplit('.', 1)[0] + '.pt.vtt'
+                    ydl.download([video_url])
+                    print(f"Legendas baixadas para: {subtitle_file}")
+                else:
+                    print("Nenhuma legenda em português disponível.")
+                return subtitle_file
+            except Exception as e:
+                print(f"Erro ao baixar legendas: {e}")
+                return None
+
+    def clean_and_consolidate_subtitles(self, subtitle_file, video_name):
+        try:
+            with open(subtitle_file, 'r', encoding='utf-8') as file:
+                content = file.read()
+
+            content = re.sub(r'(WEBVTT|Kind:.*|Language:.*)', '', content)
+            content = re.sub(r'\d{2}:\d{2}:\d{2}\.\d{3} --> .*?\n', '', content)
+            content = re.sub(r'<.*?>', '', content)
+            content = re.sub(r'&nbsp;', ' ', content)
+            content = re.sub(r'align:start position:\d+%|\n+', '\n', content).strip()
+
+            lines = content.splitlines()
+            unique_lines = list(dict.fromkeys(line.strip() for line in lines if line.strip()))
+
+            consolidated_text = '\n'.join(unique_lines).strip()
+
+            # Salvar as legendas em um arquivo JSON
+            json_filename = f"{video_name}_subtitles.json"
+            with open(json_filename, 'w', encoding='utf-8') as json_file:
+                json.dump({"subtitles": unique_lines}, json_file, ensure_ascii=False, indent=4)
+
+            print(f"Texto consolidado salvo em: {json_filename}")
+            return json_filename
+        except Exception as e:
+            print(f"Erro ao limpar e consolidar as legendas: {e}")
+            return None
+
+# YouTubePage.py
+import wx
+import json
+import os
+import threading
+from SubtitleProcessor import SubtitleProcessor
+
+class YouTubePage(wx.Panel):
+    def __init__(self, parent):
+        super(YouTubePage, self).__init__(parent)
+        self.subtitle_processor = SubtitleProcessor()
+        self.history_file = "história do YouTube/histórico.json"
+        self.InitUI()
+        self.LoadHistory()
+
+    def InitUI(self):
+        vbox = wx.BoxSizer(wx.HORIZONTAL)
+
+        # Sidebar para o histórico
+        self.sidebar = wx.ListBox(self, style=wx.LB_SINGLE)
+        vbox.Add(self.sidebar, proportion=1, flag=wx.EXPAND | wx.ALL, border=5)
+
+        # Pane para o conteúdo do YouTube
+        content_box = wx.BoxSizer(wx.VERTICAL)
+
+        # Linha para URL e botão "Colar"
+        hbox1 = wx.BoxSizer(wx.HORIZONTAL)
+        self.url_label = wx.StaticText(self, label="URL do Vídeo:")
+        hbox1.Add(self.url_label, flag=wx.RIGHT, border=8)
+        self.url_text = wx.TextCtrl(self)
+        hbox1.Add(self.url_text, proportion=1)
+        
+        self.paste_button = wx.Button(self, label="Colar")
+        self.paste_button.Bind(wx.EVT_BUTTON, self.OnPaste)
+        hbox1.Add(self.paste_button, flag=wx.LEFT, border=8)
+        
+        content_box.Add(hbox1, flag=wx.EXPAND | wx.LEFT | wx.RIGHT | wx.TOP, border=10)
+
+        # Botões principais e barra de progresso
+        hbox2 = wx.BoxSizer(wx.HORIZONTAL)
+
+        # Alinhado à esquerda
+        left_box = wx.BoxSizer(wx.HORIZONTAL)
+        self.process_button = wx.Button(self, label="Processar")
+        self.process_button.Bind(wx.EVT_BUTTON, self.OnProcess)
+        left_box.Add(self.process_button)
+
+        self.clear_button = wx.Button(self, label="Limpar")
+        self.clear_button.Bind(wx.EVT_BUTTON, self.OnClear)
+        left_box.Add(self.clear_button, flag=wx.LEFT | wx.RIGHT, border=5)
+
+        self.copy_button = wx.Button(self, label="Copiar")
+        self.copy_button.Bind(wx.EVT_BUTTON, self.OnCopy)
+        left_box.Add(self.copy_button, flag=wx.LEFT | wx.RIGHT, border=5)
+
+        self.summarize_button = wx.Button(self, label="Resumir")
+        self.summarize_button.Bind(wx.EVT_BUTTON, self.OnSummarize)
+        left_box.Add(self.summarize_button, flag=wx.LEFT | wx.RIGHT, border=5)
+
+        self.progress_bar = wx.Gauge(self, range=100, size=(250, 25))
+        left_box.Add(self.progress_bar, flag=wx.LEFT, border=10)
+
+        hbox2.Add(left_box, flag=wx.ALIGN_LEFT)
+        content_box.Add(hbox2, flag=wx.EXPAND | wx.TOP | wx.BOTTOM, border=10)
+
+        # Caixa de texto para texto processado
+        hbox3 = wx.BoxSizer(wx.HORIZONTAL)
+
+        # Tela original de texto
+        self.text_ctrl = wx.TextCtrl(self, style=wx.TE_MULTILINE | wx.TE_READONLY)
+        hbox3.Add(self.text_ctrl, proportion=1, flag=wx.EXPAND | wx.ALL, border=5)
+
+        # Nova tela para resumo
+        self.summary_ctrl = wx.TextCtrl(self, style=wx.TE_MULTILINE | wx.TE_READONLY)
+        hbox3.Add(self.summary_ctrl, proportion=1, flag=wx.EXPAND | wx.ALL, border=5)
+
+        content_box.Add(hbox3, proportion=1, flag=wx.EXPAND)
+
+        # Contador de palavras para o texto original
+        self.word_count_label = wx.StaticText(self, label="Palavras: 0")
+        content_box.Add(self.word_count_label, flag=wx.ALIGN_RIGHT | wx.RIGHT | wx.BOTTOM, border=10)
+
+        # Contador de palavras para o resumo
+        self.summary_word_count_label = wx.StaticText(self, label="Palavras (Resumo): 0")
+        content_box.Add(self.summary_word_count_label, flag=wx.ALIGN_RIGHT | wx.RIGHT | wx.BOTTOM, border=10)
+
+        vbox.Add(content_box, proportion=3, flag=wx.EXPAND)
+
+        self.SetSizer(vbox)
+
+    def OnPaste(self, event):
+        """Cola o conteúdo da área de transferência na URL e limpa o campo antes."""
+        if wx.TheClipboard.Open():
+            if wx.TheClipboard.IsSupported(wx.DataFormat(wx.DF_TEXT)):
+                data = wx.TextDataObject()
+                wx.TheClipboard.GetData(data)
+                self.url_text.SetValue(data.GetText())
+            wx.TheClipboard.Close()
+
+    def OnCopy(self, event):
+        """Copia o texto processado para a área de transferência."""
+        text = self.text_ctrl.GetValue()
+        if text:
+            if wx.TheClipboard.Open():
+                wx.TheClipboard.SetData(wx.TextDataObject(text))
+                wx.TheClipboard.Close()
+                wx.MessageBox("Texto copiado com sucesso!", "Informação", wx.ICON_INFORMATION)
+        else:
+            wx.MessageBox("Nada para copiar.", "Erro", wx.ICON_ERROR)
+
+    def OnSummarize(self, event):
+        """Evento para resumir o texto (a funcionalidade será implementada depois)."""
+        wx.MessageBox("Função de resumo ainda não implementada.", "Informação", wx.ICON_INFORMATION)
+
+        # Exemplo de como contar palavras no texto resumido (após implementar o resumo)
+        summary_content = self.summary_ctrl.GetValue()  # Texto do resumo
+        summary_word_count = len(summary_content.split())
+        self.summary_word_count_label.SetLabel(f"Palavras (Resumo): {summary_word_count}")
+
+    def GetVideoNameFromURL(self, url):
+        """Obtém o nome do vídeo a partir da URL."""
+        # Extrai o nome do vídeo do URL
+        # Exemplo: https://www.youtube.com/watch?v=dQw4w9WgXcQ -> "dQw4w9WgXcQ"
+        return url.split('v=')[-1]
+
+    def AddToHistory(self, video_name):
+        """Adiciona o nome do vídeo à sidebar."""
+        self.sidebar.Append(video_name)
+
+    def LoadHistory(self):
+        """Carrega o histórico de vídeos da pasta 'história do YouTube'."""
+        if not os.path.exists("história do YouTube"):
+            os.makedirs("história do YouTube")
+
+        if os.path.exists(self.history_file):
+            with open(self.history_file, 'r', encoding='utf-8') as file:
+                history = json.load(file)
+                for video_name in history:
+                    self.AddToHistory(video_name)
+
+    def OnProcess(self, event):
+        """Inicia o processamento do vídeo e atualiza o histórico na sidebar."""
+        video_url = self.url_text.GetValue()
+        if not video_url:
+            wx.MessageBox("Por favor, insira uma URL do vídeo.", "Erro", wx.ICON_ERROR)
+            return
+
+        self.progress_bar.SetValue(10)  # Atualiza a barra de progresso
+
+        def run():
+            subtitle_file = self.subtitle_processor.download_subtitles(video_url)
+            if subtitle_file:
+                self.progress_bar.SetValue(70)
+                video_name = self.GetVideoNameFromURL(video_url)
+                consolidated_file = self.subtitle_processor.clean_and_consolidate_subtitles(subtitle_file, video_name)
+                self.progress_bar.SetValue(100)
+                if consolidated_file:
+                    with open(consolidated_file, 'r', encoding='utf-8') as file:
+                        content = file.read()
+                    wx.CallAfter(self.text_ctrl.SetValue, content)
+
+                    # Contar palavras e atualizar o contador
+                    word_count = len(content.split())
+                    wx.CallAfter(self.word_count_label.SetLabel, f"Palavras: {word_count}")
+
+                    # Adicionar o nome do vídeo à sidebar e salvar o histórico
+                    wx.CallAfter(self.AddToHistory, video_name)
+                    self.SaveHistory(video_name)
+                else:
+                    wx.CallAfter(wx.MessageBox, "Erro ao consolidar as legendas.", "Erro", wx.ICON_ERROR)
+            else:
+                wx.CallAfter(wx.MessageBox, "Não foi possível obter as legendas.", "Erro", wx.ICON_ERROR)
+
+        thread = threading.Thread(target=run)
+        thread.start()
+
+    def OnClear(self, event):
+        """Limpa todos os campos e remove os arquivos de legendas armazenados."""
+        self.url_text.SetValue("")
+        self.text_ctrl.SetValue("")
+        self.summary_ctrl.SetValue("")
+        self.progress_bar.SetValue(0)
+        self.word_count_label.SetLabel("Palavras: 0")
+
+        # Limpar os arquivos de legendas na pasta
+        subtitle_files = [f for f in os.listdir("história do YouTube") if f.endswith('.txt')]
+        for file in subtitle_files:
+            os.remove(os.path.join("história do YouTube", file))
+
+        wx.MessageBox("Arquivos de legendas limpos.", "Informação", wx.ICON_INFORMATION)
+
+    def SaveHistory(self, video_name, video_url, subtitles_path):
+        """Salva o nome do vídeo, URL e caminho das legendas no histórico."""
+        if not os.path.exists("história do YouTube"):
+            os.makedirs("história do YouTube")
+
+        history = []
+        if os.path.exists(self.history_file):
+            with open(self.history_file, 'r', encoding='utf-8') as file:
+                history = json.load(file)
+
+        # Adiciona o vídeo ao histórico
+        history.append({
+            "name": video_name,
+            "url": video_url,
+            "subtitles": subtitles_path
+        })
+
+        with open(self.history_file, 'w', encoding='utf-8') as file:
+            json.dump(history, file, ensure_ascii=False, indent=4)
+
+
+=== reseta tudo.bat.txt ===
+@echo off
+mkdir MyProject
+cd MyProject
+mkdir Utils Assets Assets\Icons Assets\Themes
+echo "" > Main.py
+echo "" > YouTubePage.py
+echo "" > OfflineVideoPage.py
+echo "" > PDFPage.py
+echo "" > ChatHandler.py
+echo "" > Utils\YouTubeUtils.py
+echo "" > Utils\VideoUtils.py
+echo "" > Utils\PDFUtils.py
+echo "" > Utils\AIUtils.py
+echo "" > Assets\Icons\.gitkeep
+echo "" > Assets\Themes\.gitkeep
+echo Estrutura de diretórios e arquivos criada com sucesso!
+pause
+=== MyProject\ChatIA.py ===
+import requests
+import json
+from VideoHistory import VideoHistory  # Certifique-se de que a classe VideoHistory está importada corretamente
+
+class ChatIA:
+    def __init__(self):
+        self.api_url = "http://localhost:11434/v1/chat/completions"
+        self.model_name = "gemma2:2b"
+        self.history = VideoHistory()  # Instancia a nova classe VideoHistory
+
+    def generate_summary(self, text):
+        payload = {
+            "model": self.model_name,
+            "messages": [
+                {"role": "system", "content": "Fale Pt-BR. Faça um resumo do texto abaixo de forma coerente e concisa, sem adicionar informações desnecessárias ou distorcer a mensagem principal."},
+                {"role": "user", "content": text}
+            ]
+        }
+        headers = {"Content-Type": "application/json"}
+        
+        try:
+            response = requests.post(self.api_url, headers=headers, data=json.dumps(payload))
+            response.raise_for_status()
+            result = response.json()
+            ai_response = result.get("choices", [{}])[0].get("message", {}).get("content", None)
+            if ai_response is None:
+                raise ValueError("A resposta da IA é None.")
+            return ai_response
+        except requests.exceptions.HTTPError as http_err:
+            print(f"Erro HTTP: {http_err}")
+            return None
+        except Exception as err:
+            print(f"Erro: {err}")
+            return None
+
+    def save_summary(self, video_name, video_url, subtitles_path, summary):
+        """Salva todas as informações do vídeo, incluindo o resumo, no arquivo JSON associado ao vídeo."""
+        self.history.save_history(video_name, video_url, subtitles_path, summary)
+
+    def load_summary(self, video_name):
+        """Carrega todas as informações do arquivo JSON associado ao vídeo."""
+        history = self.history.load_history()
+        for video in history:
+            if video['name'] == video_name:
+                return video  # Retorna todas as informações do vídeo
+        return None
+=== MyProject\HistorySidebar.py ===
+import wx
+import json
+import os
+import yt_dlp  # Certifique-se de que o yt-dlp está instalado
+
+class HistorySidebar(wx.ListBox):
+    def __init__(self, parent):
+        super(HistorySidebar, self).__init__(parent, style=wx.LB_SINGLE)
+        self.history_file = "história do YouTube/histórico.json"
+        self.parent = parent  # Referência ao pai para chamar métodos
+        self.Bind(wx.EVT_LISTBOX, self.OnSelectHistory)
+        self.LoadHistory()
+
+    def LoadHistory(self):
+        """Carrega o histórico de vídeos da pasta 'história do YouTube'."""
+        if not os.path.exists("história do YouTube"):
+            os.makedirs("história do YouTube")
+
+        # Cria o arquivo JSON se não existir
+        if not os.path.exists(self.history_file):
+            with open(self.history_file, 'w', encoding='utf-8') as file:
+                json.dump([], file)  # Inicializa com uma lista vazia
+
+        if os.path.exists(self.history_file):
+            with open(self.history_file, 'r', encoding='utf-8') as file:
+                history = json.load(file)
+                for video in history:
+                    self.Append(video['name'])  # Adiciona o nome do vídeo à lista
+
+    def OnSelectHistory(self, event):
+        """Carrega as informações do vídeo selecionado na barra lateral."""
+        selection = self.GetSelection()
+        if selection != wx.NOT_FOUND:
+            video_name = self.GetString(selection)
+            print(f"Selecionado: {video_name}")  # Para depuração
+            self.LoadVideoInfo(video_name)
+
+    def LoadVideoInfo(self, video_name):
+        """Carrega as informações do vídeo selecionado."""
+        if os.path.exists(self.history_file):
+            with open(self.history_file, 'r', encoding='utf-8') as file:
+                history = json.load(file)
+                for video in history:
+                    if video['name'] == video_name:
+                        # Chama um método do parent para carregar a URL e legendas
+                        self.parent.LoadVideo(video['url'], video['subtitles'])
+                        break
+
+    def GetVideoTitle(self, url):
+        """Obtém o título do vídeo a partir da URL usando yt-dlp."""
+        ydl_opts = {
+            'quiet': True,
+            'force_generic_extractor': True,
+        }
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info_dict = ydl.extract_info(url, download=False)
+            return info_dict.get('title', None)
+=== MyProject\Main.py ===
+import wx
+from YouTubePage import YouTubePage
+
+class MainFrame(wx.Frame):
+    def __init__(self):
+        super().__init__(None, title="Resumidor de Vídeos", size=(800, 600))
+
+        # Criar um notebook para as abas
+        self.notebook = wx.Notebook(self)
+
+        # Adicionar a aba do YouTube
+        self.youtube_page = YouTubePage(self.notebook)
+        self.notebook.AddPage(self.youtube_page, "YouTube")
+
+        # Configurar o layout principal
+        sizer = wx.BoxSizer(wx.VERTICAL)
+        sizer.Add(self.notebook, 1, wx.EXPAND)
+        self.SetSizer(sizer)
+
+        self.Show()
+
+if __name__ == "__main__":
+    app = wx.App(False)
+    frame = MainFrame()
+    app.MainLoop()
+=== MyProject\SubtitleProcessor.py ===
+import yt_dlp
+import re
+import os
+import json
+
+class SubtitleProcessor:
+    def __init__(self):
+        pass
+
+    def download_subtitles(self, video_url):
+        ydl_opts = {
+            'writesubtitles': True,
+            'writeautomaticsub': True,
+            'subtitleslangs': ['pt', 'pt-br'],
+            'skip_download': True,
+            'quiet': False
+        }
+
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            try:
+                result = ydl.extract_info(video_url, download=False)
+                subtitle_file = None
+
+                if 'requested_subtitles' in result:
+                    subtitle_file = ydl.prepare_filename(result)
+                    subtitle_file = subtitle_file.rsplit('.', 1)[0] + '.pt.vtt'
+                    ydl.download([video_url])
+                    print(f"Legendas baixadas para: {subtitle_file}")
+                else:
+                    print("Nenhuma legenda em português disponível.")
+                return subtitle_file
+            except Exception as e:
+                print(f"Erro ao baixar legendas: {e}")
+                return None
+
+    def clean_and_consolidate_subtitles(self, subtitle_file, video_name):
+        try:
+            with open(subtitle_file, 'r', encoding='utf-8') as file:
+                content = file.read()
+
+            content = re.sub(r'(WEBVTT|Kind:.*|Language:.*)', '', content)
+            content = re.sub(r'\d{2}:\d{2}:\d{2}\.\d{3} --> .*?\n', '', content)
+            content = re.sub(r'<.*?>', '', content)
+            content = re.sub(r'&nbsp;', ' ', content)
+            content = re.sub(r'align:start position:\d+%|\n+', '\n', content).strip()
+
+            lines = content.splitlines()
+            unique_lines = list(dict.fromkeys(line.strip() for line in lines if line.strip()))
+
+            consolidated_text = '\n'.join(unique_lines).strip()
+
+            # Salvar as legendas em um arquivo JSON
+            json_filename = f"{video_name}_subtitles.json"
+            with open(json_filename, 'w', encoding='utf-8') as json_file:
+                json.dump({"subtitles": unique_lines}, json_file, ensure_ascii=False, indent=4)
+
+            print(f"Texto consolidado salvo em: {json_filename}")
+            return json_filename
+        except Exception as e:
+            print(f"Erro ao limpar e consolidar as legendas: {e}")
+            return None
+=== MyProject\VideoHistory.py ===
+import requests
+import json
+import os
+
+class VideoHistory:
+    def __init__(self, history_file="história do YouTube/histórico.json"):
+        self.history_file = history_file
+        if not os.path.exists("história do YouTube"):
+            os.makedirs("história do YouTube")
+
+    def load_history(self):
+        """Carrega o histórico de vídeos do arquivo JSON."""
+        if os.path.exists(self.history_file):
+            with open(self.history_file, 'r', encoding='utf-8') as file:
+                return json.load(file)
+        return []
+
+    def save_history(self, video_name, video_url, subtitles_path, summary=None, transcription=None):
+        """Salva ou atualiza as informações do vídeo no arquivo JSON."""
+        history = self.load_history()
+
+        # Atualiza ou adiciona o vídeo no histórico
+        for video in history:
+            if video['name'] == video_name:
+                video['url'] = video_url  # Atualiza a URL
+                video['subtitles'] = subtitles_path  # Atualiza o caminho das legendas
+                if summary:
+                    video['summary'] = summary  # Adiciona ou atualiza o resumo
+                if transcription:
+                    video['transcription'] = transcription  # Adiciona ou atualiza a transcrição
+                break
+        else:
+            # Se o vídeo não estiver no histórico, adiciona uma nova entrada
+            history.append({
+                "name": video_name,
+                "url": video_url,
+                "subtitles": subtitles_path,
+                "summary": summary,  # Adiciona o resumo se fornecido
+                "transcription": transcription  # Adiciona a transcrição se fornecida
+            })
+
+        with open(self.history_file, 'w', encoding='utf-8') as file:
+            json.dump(history, file, ensure_ascii=False, indent=4)
+            
+class ChatIA:
+    def __init__(self):
+        self.api_url = "http://localhost:11434/v1/chat/completions"
+        self.model_name = "gemma2:2b"
+        self.history = VideoHistory()  # Instancia a nova classe VideoHistory
+
+    def generate_summary(self, text):
+        payload = {
+            "model": self.model_name,
+            "messages": [
+                {"role": "system", "content": "Fale Pt-BR. Faça um resumo do texto abaixo de forma coerente e concisa, sem adicionar informações desnecessárias ou distorcer a mensagem principal."},
+                {"role": "user", "content": text}
+            ]
+        }
+        headers = {"Content-Type": "application/json"}
+        
+        try:
+            response = requests.post(self.api_url, headers=headers, data=json.dumps(payload))
+            response.raise_for_status()
+            result = response.json()
+            ai_response = result.get("choices", [{}])[0].get("message", {}).get("content", None)
+            if ai_response is None:
+                raise ValueError("A resposta da IA é None.")
+            return ai_response
+        except requests.exceptions.HTTPError as http_err:
+            print(f"Erro HTTP: {http_err}")
+            return None
+        except Exception as err:
+            print(f"Erro: {err}")
+            return None
+
+    def save_summary(self, video_name, video_url, subtitles_path, summary):
+        """Salva todas as informações do vídeo, incluindo o resumo, no arquivo JSON associado ao vídeo."""
+        self.history.save_history(video_name, video_url, subtitles_path, summary)
+
+    def load_summary(self, video_name):
+        """Carrega todas as informações do arquivo JSON associado ao vídeo."""
+        history = self.history.load_history()
+        for video in history:
+            if video['name'] == video_name:
+                return video  # Retorna todas as informações do vídeo
+        return None
+
+# O restante do código permanece inalterado
+=== MyProject\YouTubePage.py ===
+import wx
+import json
+import os
+import threading
+from SubtitleProcessor import SubtitleProcessor
+from HistorySidebar import HistorySidebar  # Importa a nova classe
+from ChatIA import ChatIA
+
+class YouTubePage(wx.Panel):
+    def __init__(self, parent):
+        super(YouTubePage, self).__init__(parent)
+        self.subtitle_processor = SubtitleProcessor()
+        self.history_sidebar = HistorySidebar(self)
+        self.chat_ia = ChatIA()  # Instanciar a classe ChatIA
+        self.is_sidebar_visible = True
+        self.InitUI()
+
+    def InitUI(self):
+        vbox = wx.BoxSizer(wx.HORIZONTAL)
+
+        # Botão discreto para expandir/colapsar a barra lateral (hamburger menu)
+        self.toggle_button = wx.Button(self, label="☰")  # Usando um ícone de menu
+        self.toggle_button.Bind(wx.EVT_BUTTON, self.OnToggleSidebar)
+        self.toggle_button.SetSize((40, 40))  # Tamanho do botão
+        vbox.Add(self.toggle_button, flag=wx.ALL, border=5)
+
+        # Adiciona a barra lateral ao layout
+        vbox.Add(self.history_sidebar, proportion=1, flag=wx.EXPAND | wx.ALL, border=5)
+
+        # Pane para o conteúdo do YouTube
+        content_box = wx.BoxSizer(wx.VERTICAL)
+
+        # Linha para URL e botão "Colar"
+        hbox1 = wx.BoxSizer(wx.HORIZONTAL)
+        self.url_label = wx.StaticText(self, label="URL do Vídeo:")
+        hbox1.Add(self.url_label, flag=wx.RIGHT, border=8)
+        self.url_text = wx.TextCtrl(self)
+        hbox1.Add(self.url_text, proportion=1)
+        
+        self.paste_button = wx.Button(self, label="Colar")
+        self.paste_button.Bind(wx.EVT_BUTTON, self.OnPaste)
+        hbox1.Add(self.paste_button, flag=wx.LEFT, border=8)
+        
+        content_box.Add(hbox1, flag=wx.EXPAND | wx.LEFT | wx.RIGHT | wx.TOP, border=10)
+
+        # Botões principais e barra de progresso
+        hbox2 = wx.BoxSizer(wx.HORIZONTAL)
+
+        # Alinhado à esquerda
+        left_box = wx.BoxSizer(wx.HORIZONTAL)
+        self.process_button = wx.Button(self, label="Processar")
+        self.process_button.Bind(wx.EVT_BUTTON, self.OnProcess)
+        left_box.Add(self.process_button)
+
+        self.clear_button = wx.Button(self, label="Limpar")
+        self.clear_button.Bind(wx.EVT_BUTTON, self.OnClear)
+        left_box.Add(self.clear_button, flag=wx.LEFT | wx.RIGHT, border=5)
+
+        self.copy_button = wx.Button(self, label="Copiar")
+        self.copy_button.Bind(wx.EVT_BUTTON, self.OnCopy)
+        left_box.Add(self.copy_button, flag=wx.LEFT | wx.RIGHT, border=5)
+
+        self.summarize_button = wx.Button(self, label="Resumir")
+        self.summarize_button.Bind(wx.EVT_BUTTON, self.OnSummarize)
+        left_box.Add(self.summarize_button, flag=wx.LEFT | wx.RIGHT, border=5)
+
+        self.progress_bar = wx.Gauge(self, range=100, size=(250, 25))
+        left_box.Add(self.progress_bar, flag=wx.LEFT, border=10)
+
+        hbox2.Add(left_box, flag=wx.ALIGN_LEFT)
+        content_box.Add(hbox2, flag=wx.EXPAND | wx.TOP | wx.BOTTOM, border=10)
+
+        # Caixa de texto para texto processado
+        hbox3 = wx.BoxSizer(wx.HORIZONTAL)
+
+        # Tela original de texto
+        self.text_ctrl = wx.TextCtrl(self, style=wx.TE_MULTILINE | wx.TE_READONLY)
+        hbox3.Add(self.text_ctrl, proportion=1, flag=wx.EXPAND | wx.ALL, border=5)
+
+        # Nova tela para resumo
+        self.summary_ctrl = wx.TextCtrl(self, style=wx.TE_MULTILINE | wx.TE_READONLY)
+        hbox3.Add(self.summary_ctrl, proportion=1, flag=wx.EXPAND | wx.ALL, border=5)
+
+        content_box.Add(hbox3, proportion=1, flag=wx.EXPAND)
+
+        # Contador de palavras para o texto original
+        self.word_count_label = wx.StaticText(self, label="Palavras: 0")
+        content_box.Add(self.word_count_label, flag=wx.ALIGN_RIGHT | wx.RIGHT | wx.BOTTOM, border=10)
+
+        # Contador de palavras para o resumo
+        self.summary_word_count_label = wx.StaticText(self, label="Palavras (Resumo): 0")
+        content_box.Add(self.summary_word_count_label, flag=wx.ALIGN_RIGHT | wx.RIGHT | wx.BOTTOM, border=10)
+
+        vbox.Add(content_box, proportion=3, flag=wx.EXPAND)
+
+        self.SetSizer(vbox)
+
+    def OnToggleSidebar(self, event):
+        """Alterna a visibilidade da barra lateral."""
+        if self.is_sidebar_visible:
+            self.history_sidebar.Hide()  # Esconde a barra lateral
+            self.toggle_button.SetLabel("☰")  # Mantém o ícone do botão
+        else:
+            self.history_sidebar.Show()  # Mostra a barra lateral
+            self.toggle_button.SetLabel("☰")  # Mantém o ícone do botão
+        self.is_sidebar_visible = not self.is_sidebar_visible  # Alterna o estado
+        self.Layout()  # Atualiza o layout
+
+    def LoadVideo(self, video_url, subtitles_path):
+        """Carrega a URL e as legendas do vídeo selecionado."""
+        self.url_text.SetValue(video_url)
+        if os.path.exists(subtitles_path):
+            with open(subtitles_path, 'r', encoding='utf-8') as subtitle_file:
+                content = subtitle_file.read()
+                self.text_ctrl.SetValue(content)
+                # Contar palavras e atualizar o contador
+                word_count = len(content.split())
+                self.word_count_label.SetLabel(f"Palavras: {word_count}")
+
+    def OnPaste(self, event):
+        """Cola o conteúdo da área de transferência na URL e limpa o campo antes."""
+        if wx.TheClipboard.Open():
+            if wx.TheClipboard.IsSupported(wx.DataFormat(wx.DF_TEXT)):
+                data = wx.TextDataObject()
+                wx.TheClipboard.GetData(data)
+                self.url_text.SetValue(data.GetText())
+            wx.TheClipboard.Close()
+
+    def OnCopy(self, event):
+        """Copia o texto processado para a área de transferência."""
+        text = self.text_ctrl.GetValue()
+        if text:
+            if wx.TheClipboard.Open():
+                wx.TheClipboard.SetData(wx.TextDataObject(text))
+                wx.TheClipboard.Close()
+                wx.MessageBox("Texto copiado com sucesso!", "Informação", wx.ICON_INFORMATION)
+        else:
+            wx.MessageBox("Nada para copiar.", "Erro", wx.ICON_ERROR)
+
+    def OnClear(self, event):
+        """Limpa todos os campos e remove os arquivos de legendas armazenados."""
+        self.url_text.SetValue("")
+        self.text_ctrl.SetValue("")
+        self.summary_ctrl.SetValue("")
+        self.progress_bar.SetValue(0)
+        self.word_count_label.SetLabel("Palavras: 0")
+
+        # Limpar os arquivos de legendas na pasta
+        subtitle_files = [f for f in os.listdir("história do YouTube") if f.endswith('.txt')]
+        for file in subtitle_files:
+            os.remove(os.path.join("história do YouTube", file))
+
+        wx.MessageBox("Arquivos de legendas limpos.", "Informação", wx.ICON_INFORMATION)
+
+    def GetVideoNameFromURL(self, url):
+        """Obtém o nome do vídeo a partir da URL."""
+        return url.split('v=')[-1]
+
+    def OnSummarize(self, event):
+        """Evento para resumir o texto."""
+        original_text = self.text_ctrl.GetValue()
+        if not original_text:
+            wx.MessageBox("Não há texto para resumir.", "Erro", wx.ICON_ERROR)
+            return
+
+        try:
+            # Gerar o resumo usando a classe ChatIA
+            summary = self.chat_ia.generate_summary(original_text)
+            self.summary_ctrl.SetValue(summary)  # Exibir o resumo na caixa de texto de resumo
+
+            # Obter informações do vídeo
+            video_name = self.GetVideoNameFromURL(self.url_text.GetValue())
+            video_url = self.url_text.GetValue()  # Obtenha a URL do vídeo
+            subtitles_path = "caminho/para/as/legendas"  # Substitua pelo caminho correto das legendas
+
+            # Chame o método save_summary com todos os parâmetros necessários
+            self.chat_ia.save_summary(video_name, video_url, subtitles_path, summary)
+
+            # Adiciona o vídeo à lista
+            self.history_sidebar.Append(video_name)  
+
+
+            wx.MessageBox("Resumo gerado e salvo com sucesso!", "Sucesso", wx.ICON_INFORMATION)
+        except Exception as e:
+            wx.MessageBox(f"Erro ao gerar resumo: {str(e)}", "Erro", wx.ICON_ERROR)
+
+    def OnProcess(self, event):
+        """Inicia o processamento do vídeo e atualiza o histórico na sidebar."""
+        video_url = self.url_text.GetValue()
+        if not video_url:
+            wx.MessageBox("Por favor, insira uma URL do vídeo.", "Erro", wx.ICON_ERROR)
+            return
+
+        self.progress_bar.SetValue(10)  # Atualiza a barra de progresso
+
+        def run():
+            subtitle_file = self.subtitle_processor.download_subtitles(video_url)
+            if subtitle_file:
+                self.progress_bar.SetValue(70)
+                video_name = os.path.basename(subtitle_file).replace('.pt.vtt', '')  # Remove a extensão
+                video_name = video_name.split('[')[0].strip()  # Remove a parte entre colchetes e espaços em branco
+                consolidated_file = self.subtitle_processor.clean_and_consolidate_subtitles(subtitle_file, video_name)
+                self.progress_bar.SetValue(100)
+                if consolidated_file:
+                    with open(consolidated_file, 'r', encoding='utf-8') as file:
+                        content = file.read()
+                    wx.CallAfter(self.text_ctrl.SetValue, content)
+
+                    # Contar palavras e atualizar o contador
+                    word_count = len(content.split())
+                    wx.CallAfter(self.word_count_label.SetLabel, f"Palavras: {word_count}")
+
+                    # Salvar o histórico usando a nova função
+                    wx.CallAfter(self.chat_ia.save_summary, video_name, video_url, consolidated_file, None)  # Passar None para o resumo por enquanto
+
+                    # Adiciona o vídeo à lista da HistorySidebar
+                    wx.CallAfter(self.history_sidebar.Append, video_name)
+
+                else:
+                    wx.CallAfter(wx.MessageBox, "Erro ao consolidar as legendas.", "Erro", wx.ICON_ERROR)
+            else:
+                wx.CallAfter(wx.MessageBox, "Não foi possível obter as legendas.", "Erro", wx.ICON_ERROR)
+
+        thread = threading.Thread(target=run)
+        thread.start()
+=== project\app.py ===
+from flask import Flask, render_template, request, jsonify
+import json
+import os
+from utils.subtitle_processor import SubtitleProcessor
+from utils.chat_ia import ChatIA
+from utils.video_history import VideoHistory
+
+app = Flask(__name__)
+subtitle_processor = SubtitleProcessor()
+chat_ia = ChatIA()
+video_history = VideoHistory()
+
+@app.route('/')
+def index():
+    history = video_history.load_history()
+    return render_template('index.html', history=history)
+
+@app.route('/process', methods=['POST'])
+def process_video():
+    video_url = request.form.get('url')
+    if not video_url:
+        return jsonify({'error': 'URL não fornecida'}), 400
+    
+    try:
+        subtitle_file = subtitle_processor.download_subtitles(video_url)
+        if not subtitle_file:
+            return jsonify({'error': 'Não foi possível baixar as legendas'}), 400
+        
+        video_name = os.path.basename(subtitle_file).replace('.pt.vtt', '')
+        consolidated_file = subtitle_processor.clean_and_consolidate_subtitles(subtitle_file, video_name)
+        
+        with open(consolidated_file, 'r', encoding='utf-8') as file:
+            content = file.read()
+        
+        return jsonify({
+            'success': True,
+            'content': content,
+            'word_count': len(content.split()),
+            'video_name': video_name
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/summarize', methods=['POST'])
+def summarize_text():
+    text = request.form.get('text')
+    video_url = request.form.get('url')
+    video_name = request.form.get('video_name')
+    
+    if not text:
+        return jsonify({'error': 'Texto não fornecido'}), 400
+    
+    try:
+        summary = chat_ia.generate_summary(text)
+        if summary:
+            chat_ia.save_summary(video_name, video_url, 
+                                  f"história do YouTube/{video_name}_subtitles.json", 
+                                  summary, 
+                                  processed_text=text)
+            return jsonify({
+                'success': True,
+                'summary': summary,
+                'word_count': len(summary.split())
+            })
+        return jsonify({'error': 'Não foi possível gerar o resumo'}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+if __name__ == '__main__':
+    app.run(debug=True)
+=== project\requirements.txt ===
+flask==2.0.1
+yt-dlp==2023.3.4
+requests==2.31.0
+=== project\utils\chat_ia.py ===
+import requests
+import json
+from utils.video_history import VideoHistory
+
+class ChatIA:
+    def __init__(self):
+        self.api_url = "http://localhost:11434/v1/chat/completions"
+        self.model_name = "gemma2:2b"
+        self.history = VideoHistory()
+
+    def generate_summary(self, text):
+        payload = {
+            "model": self.model_name,
+            "messages": [
+                {"role": "system", "content": "Fale Pt-BR. Faça um resumo do texto abaixo de forma coerente e concisa, sem adicionar informações desnecessárias ou distorcer a mensagem principal."},
+                {"role": "user", "content": text}
+            ]
+        }
+        headers = {"Content-Type": "application/json"}
+        
+        try:
+            response = requests.post(self.api_url, headers=headers, data=json.dumps(payload))
+            response.raise_for_status()
+            result = response.json()
+            ai_response = result.get("choices", [{}])[0].get("message", {}).get("content", None)
+            if ai_response is None:
+                raise ValueError("A resposta da IA é None.")
+            return ai_response
+        except Exception as e:
+            print(f"Erro ao gerar resumo: {e}")
+            return None
+
+    def save_summary(self, video_name, video_url, subtitles_path, summary, processed_text=None):
+        self.history.save_history(video_name, video_url, subtitles_path, summary, processed_text)
+=== project\utils\subtitle_processor.py ===
+import yt_dlp
+import re
+import os
+import json
+
+class SubtitleProcessor:
+    def download_subtitles(self, video_url):
+        ydl_opts = {
+            'writesubtitles': True,
+            'writeautomaticsub': True,
+            'subtitleslangs': ['pt', 'pt-br'],
+            'skip_download': True,
+            'quiet': False
+        }
+
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            try:
+                result = ydl.extract_info(video_url, download=False)
+                subtitle_file = None
+
+                if 'requested_subtitles' in result:
+                    subtitle_file = ydl.prepare_filename(result)
+                    subtitle_file = subtitle_file.rsplit('.', 1)[0] + '.pt.vtt'
+                    ydl.download([video_url])
+                    print(f"Legendas baixadas para: {subtitle_file}")
+                else:
+                    print("Nenhuma legenda em português disponível.")
+                return subtitle_file
+            except Exception as e:
+                print(f"Erro ao baixar legendas: {e}")
+                return None
+
+    def clean_and_consolidate_subtitles(self, subtitle_file, video_name):
+        try:
+            with open(subtitle_file, 'r', encoding='utf-8') as file:
+                content = file.read()
+
+            # Limpar formatação das legendas
+            content = re.sub(r'(WEBVTT|Kind:.*|Language:.*)', '', content)
+            content = re.sub(r'\d{2}:\d{2}:\d{2}\.\d{3} --> .*?\n', '', content)
+            content = re.sub(r'<.*?>', '', content)
+            content = re.sub(r'&nbsp;', ' ', content)
+            content = re.sub(r'align:start position:\d+%|\n+', '\n', content).strip()
+
+            # Remover linhas duplicadas e vazias
+            lines = content.splitlines()
+            unique_lines = list(dict.fromkeys(line.strip() for line in lines if line.strip()))
+            consolidated_text = '\n'.join(unique_lines).strip()
+
+            # Criar diretório se não existir
+            os.makedirs('história do YouTube', exist_ok=True)
+
+            # Salvar em arquivo JSON
+            json_filename = os.path.join('história do YouTube', f"{video_name}_subtitles.json")
+            with open(json_filename, 'w', encoding='utf-8') as json_file:
+                json.dump({"subtitles": unique_lines}, json_file, ensure_ascii=False, indent=4)
+
+            return json_filename
+        except Exception as e:
+            print(f"Erro ao limpar e consolidar as legendas: {e}")
+            return None
+=== project\utils\video_history.py ===
+import json
+import os
+
+class VideoHistory:
+    def __init__(self):
+        self.history_dir = "história do YouTube"
+        self.history_file = os.path.join(self.history_dir, "histórico.json")
+        os.makedirs(self.history_dir, exist_ok=True)
+
+    def load_history(self):
+        if os.path.exists(self.history_file):
+            with open(self.history_file, 'r', encoding='utf-8') as file:
+                return json.load(file)
+        return []
+
+    def save_history(self, video_name, video_url, subtitles_path, summary=None, processed_text=None):
+        history = self.load_history()
+        
+        # Procura por entrada existente
+        for video in history:
+            if video['name'] == video_name:
+                video.update({
+                    'url': video_url,
+                    'subtitles': subtitles_path,
+                    'summary': summary,
+                    'processed_text': processed_text
+                })
+                break
+        else:
+            # Adiciona nova entrada se não existir
+            history.append({
+                'name': video_name,
+                'url': video_url,
+                'subtitles': subtitles_path,
+                'summary': summary,
+                'processed_text': processed_text
+            })
+
+        # Salva o histórico atualizado
+        with open(self.history_file, 'w', encoding='utf-8') as file:
+            json.dump(history, file, ensure_ascii=False, indent=4)
+=== project\utils\__init__.py ===
+# Este arquivo vazio marca o diretório como um pacote Python
+=== project web\app.py ===
+from flask import Flask, render_template
+from routes.youtube_routes import youtube_bp
+
+app = Flask(__name__)
+app.config['SECRET_KEY'] = 'your-secret-key'
+
+# Register blueprints
+app.register_blueprint(youtube_bp)
+
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+if __name__ == '__main__':
+    app.run(debug=True)
+=== project web\projeto web-resultado.txt ===
+========================================== 
+Arquivo: C:\Users\Usuario\Desktop\PY\PY\IA_GUI\project web\app.py 
+========================================== 
+from flask import Flask, render_template
+from routes.youtube_routes import youtube_bp
+
+app = Flask(__name__)
+app.config['SECRET_KEY'] = 'your-secret-key'
+
+# Register blueprints
+app.register_blueprint(youtube_bp)
+
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+if __name__ == '__main__':
+    app.run(debug=True)  REM Adiciona uma linha em branco para separação
+========================================== 
+Arquivo: C:\Users\Usuario\Desktop\PY\PY\IA_GUI\project web\copia-codigo-recursivo.bat 
+========================================== 
+@echo off
+setlocal enabledelayedexpansion
+
+REM Define o arquivo de saída
+set "output_file=resultado.txt"
+
+REM Apaga o arquivo de saída se já existir
+if exist "%output_file%" del "%output_file%"
+
+REM Função para percorrer recursivamente as pastas e arquivos
+call :process_folder "%cd%"
+
+REM Adiciona a estrutura da árvore de pastas ao final do arquivo
+echo. >> "%output_file%"
+echo ========================================== >> "%output_file%"
+echo Estrutura de pastas: >> "%output_file%"
+echo ========================================== >> "%output_file%"
+echo ``` >> "%output_file%"
+
+REM Gera a árvore e salva no arquivo
+tree /a /f >> "%output_file%"
+
+echo ``` >> "%output_file%"
+
+echo Operação concluída! Arquivos combinados e estrutura de pastas adicionada em "%output_file%".
+pause
+exit /b
+
+:process_folder
+set "current_folder=%~1"
+
+REM Percorre os arquivos na pasta atual
+for %%f in ("%current_folder%\*.*") do (
+    if not "%%~ff"=="%output_file%" (
+        echo ========================================== >> "%output_file%"
+        echo Arquivo: %%~f >> "%output_file%"
+        echo ========================================== >> "%output_file%"
+        type "%%f" >> "%output_file%"
+        echo. >> "%output_file%" REM Adiciona uma linha em branco para separação
+    )
+)
+
+REM Percorre as subpastas recursivamente
+for /d %%d in ("%current_folder%\*") do (
+    call :process_folder "%%d"
+)
+exit /b
+  REM Adiciona uma linha em branco para separação
+========================================== 
+Arquivo: C:\Users\Usuario\Desktop\PY\PY\IA_GUI\project web\package.json 
+========================================== 
+{
+  "name": "youtube-subtitles",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "python app.py"
+  },
+  "dependencies": {
+    "yt-dlp": "^2023.11.16"
+  }
+}  REM Adiciona uma linha em branco para separação
+========================================== 
+Arquivo: C:\Users\Usuario\Desktop\PY\PY\IA_GUI\project web\requirements.txt 
+========================================== 
+flask==3.0.0
+yt-dlp==2023.11.16
+python-dotenv==1.0.0  REM Adiciona uma linha em branco para separação
+========================================== 
+Arquivo: C:\Users\Usuario\Desktop\PY\PY\IA_GUI\project web\routes\youtube_routes.py 
+========================================== 
+from flask import Blueprint, request, jsonify
+from services.subtitle_service import SubtitleService
+
+youtube_bp = Blueprint('youtube', __name__)
+subtitle_service = SubtitleService()
+
+@youtube_bp.route('/api/process-video', methods=['POST'])
+def process_video():
+    data = request.json
+    video_url = data.get('url')
+    
+    if not video_url:
+        return jsonify({'error': 'URL is required'}), 400
+        
+    try:
+        subtitles = subtitle_service.process_video(video_url)
+        return jsonify({'subtitles': subtitles})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500  REM Adiciona uma linha em branco para separação
+========================================== 
+Arquivo: C:\Users\Usuario\Desktop\PY\PY\IA_GUI\project web\routes\__pycache__\youtube_routes.cpython-312.pyc 
+========================================== 
+
+
+    5jgo                     x    d dl mZmZmZ d dlmZ  ede      Z e       Zej                  ddg      d        Z
+y)	    )	Blueprintrequestjsonify)SubtitleServiceyoutubez/api/process-videoPOST)methodsc                     t         j                  } | j                  d      }|st        ddi      dfS 	 t        j                  |      }t        d|i      S # t        $ r"}t        dt        |      i      dfcY d }~S d }~ww xY w)NurlerrorzURL is requiredi  	subtitlesi  )r   jsongetr   subtitle_service
+process_video	Exceptionstr)data	video_urlr
+   es       Jc:\Users\Usuario\Desktop\PY\PY\IA_GUI\project web\routes\youtube_routes.pyr   r      s    <<DI!234c99/$229=	Y/00 /Q()3../s   !A 	BA<6B<BN)flaskr   r   r   services.subtitle_servicer   __name__
+youtube_bpr   router        r   <module>r      sH    - - 5
+y(
++
+"$ &9/ :/r     REM Adiciona uma linha em branco para separação
+========================================== 
+Arquivo: C:\Users\Usuario\Desktop\PY\PY\IA_GUI\project web\services\subtitle_service.py 
+========================================== 
+import yt_dlp
+import re
+import os
+from pathlib import Path
+
+class SubtitleService:
+    def __init__(self):
+        # Criar diretório para legendas se não existir
+        self.subtitles_dir = Path("subtitles")
+        self.subtitles_dir.mkdir(exist_ok=True)
+        
+        self.ydl_opts = {
+            'writesubtitles': True,
+            'writeautomaticsub': True,
+            'subtitleslangs': ['pt', 'pt-br'],
+            'skip_download': True,
+            'quiet': False,
+            'outtmpl': str(self.subtitles_dir / '%(id)s.%(ext)s')
+        }
+
+    def process_video(self, video_url):
+        """Process video URL and return subtitles"""
+        try:
+            with yt_dlp.YoutubeDL(self.ydl_opts) as ydl:
+                # Extrair informações do vídeo
+                info = ydl.extract_info(video_url, download=False)
+                video_id = info['id']
+                
+                # Verificar se há legendas disponíveis
+                if not info.get('subtitles') and not info.get('automatic_captions'):
+                    raise Exception("No Portuguese subtitles available")
+                
+                # Download e processamento das legendas
+                subtitles = self._download_and_clean_subtitles(video_url, video_id)
+                return subtitles
+                
+        except Exception as e:
+            raise Exception(f"Error processing video: {str(e)}")
+    
+    def _download_and_clean_subtitles(self, video_url, video_id):
+        """Download and clean subtitles"""
+        try:
+            with yt_dlp.YoutubeDL(self.ydl_opts) as ydl:
+                # Download das legendas
+                ydl.download([video_url])
+                
+                # Procurar pelo arquivo de legendas
+                subtitle_file = None
+                for ext in ['.pt.vtt', '.pt-BR.vtt']:
+                    possible_file = self.subtitles_dir / f"{video_id}{ext}"
+                    if possible_file.exists():
+                        subtitle_file = possible_file
+                        break
+                
+                if not subtitle_file:
+                    raise Exception("Could not find subtitle file after download")
+                
+                # Ler e limpar o conteúdo das legendas
+                with open(subtitle_file, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                
+                # Limpar formatação VTT
+                content = re.sub(r'WEBVTT\n\n', '', content)
+                content = re.sub(r'\d{2}:\d{2}:\d{2}\.\d{3} --> \d{2}:\d{2}:\d{2}\.\d{3}\n', '', content)
+                content = re.sub(r'<[^>]+>', '', content)  # Remove tags HTML
+                content = re.sub(r'\n\n+', '\n\n', content)  # Remove linhas extras
+                
+                # Limpar o arquivo após processamento
+                os.remove(subtitle_file)
+                
+                return content.strip()
+                
+        except Exception as e:
+            raise Exception(f"Error processing subtitles: {str(e)}")  REM Adiciona uma linha em branco para separação
+========================================== 
+Arquivo: C:\Users\Usuario\Desktop\PY\PY\IA_GUI\project web\services\__pycache__\subtitle_service.cpython-312.pyc 
+========================================== 
+
+
+    5jg$                     <    d dl Z d dlZd dlZd dlmZ  G d d      Zy)    N)Pathc                       e Zd Zd Zd Zd Zy)SubtitleServicec           	          t        d      | _        | j                  j                  d       ddddgddt        | j                  dz        d| _        y )	N	subtitlesT)exist_okptzpt-brFz%(id)s.%(ext)s)writesubtitleswriteautomaticsubsubtitleslangs
+skip_downloadquietouttmpl)r   
+subtitles_dirmkdirstrydl_opts)selfs    Nc:\Users\Usuario\Desktop\PY\PY\IA_GUI\project web\services\subtitle_service.py__init__zSubtitleService.__init__   sX    !+.  $ / #!%#Wo!4--0@@A
+
+
+    c                 p   	 t        j                  | j                        5 }|j                  |d      }|d   }|j	                  d      s|j	                  d      st        d      | j
+                  ||      }|cddd       S # 1 sw Y   yxY w# t
+        $ r}t        dt        |             d}~ww xY w)	z&Process video URL and return subtitlesF)downloadidr   automatic_captionsz!No Portuguese subtitles availableNzError processing video: )yt_dlp	YoutubeDLr   extract_infoget	Exception_download_and_clean_subtitlesr   )r   	video_urlydlinfovideo_idr   es          r   
+process_videozSubtitleService.process_video   s    	A!!$--0 
+!C''	E'B: xx,TXX>R5S#$GHH !>>y(S	 
+! 
+! 
+!  	A6s1vh?@@	As5   B AB:	B B
+	B 
+B 	B5B00B5c                    	 t        j                  | j                        5 }|j                  |g       d}dD ])  }| j                  | | z  }|j                         s'|} n |st
+        d      t        |dd      5 }|j                         }ddd       t        j                  dd      }t        j                  d	d|      }t        j                  d
+d|      }t        j                  dd|      }t        j                  |       |j                         cddd       S # 1 sw Y   xY w# 1 sw Y   yxY w# t        $ r}	t
+        d
+t        |	             d}	~	ww xY w)zDownload and clean subtitlesN)z.pt.vttz
+.pt-BR.vttz+Could not find subtitle file after downloadrzutf-8)encodingz
+WEBVTT\n\n z7\d{2}:\d{2}:\d{2}\.\d{3} --> \d{2}:\d{2}:\d{2}\.\d{3}\nz<[^>]+>z\n\n+z
+
+zError processing subtitles: )r   r   r   r   r   existsr    openreadresubosremovestripr   )
+r   r"   r%   r#   
+subtitle_fileext
+possible_filefcontentr&   s
+             r   r!   z-SubtitleService._download_and_clean_subtitles(   sV    	E!!$--0 
+'Ci[) !%
+4 C$($6$6H:cU9K$KM$++-(5
+	 %#$QRR -w? '1ffhG' &&G<&&![]_ahi&&R9&&67; 		-(}}9
+' 
+' ' '!
+' 
+'<  	E:3q6(CDD	EsS   D: =D. D.?D"BD.	D: "D+	'D..D73D: 7D: :	EEEN)__name__
+__module____qualname__r   r'   r!    r   r   r   r      s    
+A&"Er   r   )r   r/   r1   pathlibr   r   r<   r   r   <module>r>      s    
+ 	 	 DE DEr     REM Adiciona uma linha em branco para separação
+========================================== 
+Arquivo: C:\Users\Usuario\Desktop\PY\PY\IA_GUI\project web\static\css\style.css 
+========================================== 
+/* Main styles */
+body {
+    background-color: #f8f9fa;
+}
+
+.card {
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+textarea {
+    resize: vertical;
+    min-height: 200px;
+}
+
+/* Progress bar */
+.progress {
+    height: 20px;
+}
+
+/* History sidebar */
+#history-sidebar .card {
+    height: calc(100vh - 100px);
+    overflow-y: auto;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    #history-sidebar {
+        margin-bottom: 20px;
+    }
+    
+    #history-sidebar .card {
+        height: auto;
+        max-height: 300px;
+    }
+}  REM Adiciona uma linha em branco para separação
+========================================== 
+Arquivo: C:\Users\Usuario\Desktop\PY\PY\IA_GUI\project web\static\js\main.js 
+========================================== 
+document.addEventListener('DOMContentLoaded', function() {
+    const videoUrlInput = document.getElementById('video-url');
+    const pasteButton = document.getElementById('paste-button');
+    const processButton = document.getElementById('process-button');
+    const clearButton = document.getElementById('clear-button');
+    const copyButton = document.getElementById('copy-button');
+    const summarizeButton = document.getElementById('summarize-button');
+    const originalText = document.getElementById('original-text');
+    const summaryText = document.getElementById('summary-text');
+    const progressBar = document.getElementById('progress-bar');
+
+    // Paste button handler
+    pasteButton.addEventListener('click', async () => {
+        try {
+            const text = await navigator.clipboard.readText();
+            videoUrlInput.value = text;
+        } catch (err) {
+            console.error('Failed to read clipboard:', err);
+        }
+    });
+
+    // Process button handler
+    processButton.addEventListener('click', async () => {
+        const url = videoUrlInput.value.trim();
+        if (!url) {
+            alert('Please enter a YouTube URL');
+            return;
+        }
+
+        progressBar.classList.remove('d-none');
+        try {
+            const response = await fetch('/api/process-video', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ url }),
+            });
+
+            const data = await response.json();
+            if (response.ok) {
+                originalText.value = data.subtitles;
+                updateWordCount();
+            } else {
+                alert(data.error || 'Error processing video');
+            }
+        } catch (error) {
+            alert('Error processing video');
+        } finally {
+            progressBar.classList.add('d-none');
+        }
+    });
+
+    // Clear button handler
+    clearButton.addEventListener('click', () => {
+        videoUrlInput.value = '';
+        originalText.value = '';
+        summaryText.value = '';
+        updateWordCount();
+    });
+
+    // Copy button handler
+    copyButton.addEventListener('click', async () => {
+        const textToCopy = originalText.value;
+        if (textToCopy) {
+            try {
+                await navigator.clipboard.writeText(textToCopy);
+                alert('Text copied successfully!');
+            } catch (err) {
+                console.error('Failed to copy text:', err);
+            }
+        }
+    });
+
+    // Word count function
+    function updateWordCount() {
+        const originalWords = originalText.value.trim().split(/\s+/).length;
+        const summaryWords = summaryText.value.trim().split(/\s+/).length;
+        
+        document.getElementById('original-word-count').textContent = `Palavras: ${originalWords}`;
+        document.getElementById('summary-word-count').textContent = `Palavras: ${summaryWords}`;
+    }
+
+    // Add input listeners for word count updates
+    originalText.addEventListener('input', updateWordCount);
+    summaryText.addEventListener('input', updateWordCount);
+});  REM Adiciona uma linha em branco para separação
+========================================== 
+Arquivo: C:\Users\Usuario\Desktop\PY\PY\IA_GUI\project web\templates\index.html 
+========================================== 
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Subtitle Processor</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet">
+</head>
+<body>
+    <div class="container mt-5">
+        <div class="row">
+            <!-- Sidebar -->
+            <div class="col-md-3" id="history-sidebar">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">Histórico</h5>
+                    </div>
+                    <div class="card-body">
+                        <ul class="list-group" id="history-list">
+                            <!-- História será adicionada dinamicamente -->
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main Content -->
+            <div class="col-md-9">
+                <div class="card">
+                    <div class="card-header">
+                        <h4>Processador de Legendas do YouTube</h4>
+                    </div>
+                    <div class="card-body">
+                        <div class="input-group mb-3">
+                            <input type="text" id="video-url" class="form-control" 
+                                   placeholder="Cole a URL do vídeo do YouTube aqui">
+                            <button class="btn btn-primary" id="paste-button">Colar</button>
+                            <button class="btn btn-success" id="process-button">Processar</button>
+                        </div>
+                        
+                        <div class="progress mb-3 d-none" id="progress-bar">
+                            <div class="progress-bar" role="progressbar" style="width: 0%"></div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h5>Texto Original</h5>
+                                <textarea class="form-control" id="original-text" rows="10" readonly></textarea>
+                                <small class="text-muted" id="original-word-count">Palavras: 0</small>
+                            </div>
+                            <div class="col-md-6">
+                                <h5>Resumo</h5>
+                                <textarea class="form-control" id="summary-text" rows="10" readonly></textarea>
+                                <small class="text-muted" id="summary-word-count">Palavras: 0</small>
+                            </div>
+                        </div>
+
+                        <div class="mt-3">
+                            <button class="btn btn-secondary" id="copy-button">Copiar</button>
+                            <button class="btn btn-info" id="summarize-button">Resumir</button>
+                            <button class="btn btn-warning" id="clear-button">Limpar</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>  REM Adiciona uma linha em branco para separação
+ 
+========================================== 
+Estrutura de pastas: 
+========================================== 
+``` 
+Listagem de caminhos de pasta
+O nmero de srie do volume  BA20-2DEC
+C:.
+|   app.py
+|   copia-codigo-recursivo.bat
+|   package.json
+|   requirements.txt
+|   resultado.txt
+|   
++---routes
+|   |   youtube_routes.py
+|   |   
+|   \---__pycache__
+|           youtube_routes.cpython-312.pyc
+|           
++---services
+|   |   subtitle_service.py
+|   |   
+|   \---__pycache__
+|           subtitle_service.cpython-312.pyc
+|           
++---static
+|   +---css
+|   |       style.css
+|   |       
+|   \---js
+|           main.js
+|           
+\---templates
+        index.html
+        
+``` 
+
+=== project web\requirements.txt ===
+flask==3.0.0
+yt-dlp==2023.11.16
+python-dotenv==1.0.0
+=== project web\routes\youtube_routes.py ===
+from flask import Blueprint, request, jsonify
+from services.subtitle_service import SubtitleService
+
+youtube_bp = Blueprint('youtube', __name__)
+subtitle_service = SubtitleService()
+
+@youtube_bp.route('/api/process-video', methods=['POST'])
+def process_video():
+    data = request.json
+    video_url = data.get('url')
+    
+    if not video_url:
+        return jsonify({'error': 'URL is required'}), 400
+        
+    try:
+        subtitles = subtitle_service.process_video(video_url)
+        return jsonify({'subtitles': subtitles})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+=== project web\services\subtitle_service.py ===
+import yt_dlp
+import re
+import os
+from pathlib import Path
+
+class SubtitleService:
+    def __init__(self):
+        # Criar diretório para legendas se não existir
+        self.subtitles_dir = Path("subtitles")
+        self.subtitles_dir.mkdir(exist_ok=True)
+        
+        self.ydl_opts = {
+            'writesubtitles': True,
+            'writeautomaticsub': True,
+            'subtitleslangs': ['pt', 'pt-br'],
+            'skip_download': True,
+            'quiet': False,
+            'outtmpl': str(self.subtitles_dir / '%(id)s.%(ext)s')
+        }
+
+    def process_video(self, video_url):
+        """Process video URL and return subtitles"""
+        try:
+            with yt_dlp.YoutubeDL(self.ydl_opts) as ydl:
+                # Extrair informações do vídeo
+                info = ydl.extract_info(video_url, download=False)
+                video_id = info['id']
+                
+                # Verificar se há legendas disponíveis
+                if not info.get('subtitles') and not info.get('automatic_captions'):
+                    raise Exception("No Portuguese subtitles available")
+                
+                # Download e processamento das legendas
+                subtitles = self._download_and_clean_subtitles(video_url, video_id)
+                return subtitles
+                
+        except Exception as e:
+            raise Exception(f"Error processing video: {str(e)}")
+    
+    def _download_and_clean_subtitles(self, video_url, video_id):
+        """Download and clean subtitles"""
+        try:
+            with yt_dlp.YoutubeDL(self.ydl_opts) as ydl:
+                # Download das legendas
+                ydl.download([video_url])
+                
+                # Procurar pelo arquivo de legendas
+                subtitle_file = None
+                for ext in ['.pt.vtt', '.pt-BR.vtt']:
+                    possible_file = self.subtitles_dir / f"{video_id}{ext}"
+                    if possible_file.exists():
+                        subtitle_file = possible_file
+                        break
+                
+                if not subtitle_file:
+                    raise Exception("Could not find subtitle file after download")
+                
+                # Ler e limpar o conteúdo das legendas
+                with open(subtitle_file, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                
+                # Limpar formatação VTT
+                content = re.sub(r'WEBVTT\n\n', '', content)
+                content = re.sub(r'\d{2}:\d{2}:\d{2}\.\d{3} --> \d{2}:\d{2}:\d{2}\.\d{3}\n', '', content)
+                content = re.sub(r'<[^>]+>', '', content)  # Remove tags HTML
+                content = re.sub(r'\n\n+', '\n\n', content)  # Remove linhas extras
+                
+                # Limpar o arquivo após processamento
+                os.remove(subtitle_file)
+                
+                return content.strip()
+                
+        except Exception as e:
+            raise Exception(f"Error processing subtitles: {str(e)}")
+=== Árvore Binária do Diretório ===
+## ia chat.txt
+0.txt
+C:\Users\Usuario\Desktop\PY\IA_GUI
+MyProject\ChatIA.py
+MyProject\HistorySidebar.py
+MyProject\Main.py
+MyProject\SubtitleProcessor.py
+MyProject\VideoHistory.py
+MyProject\YouTubePage.py
+ajuda.txt
+codigo_completo.txt
+output.txt
+project web\app.py
+project web\projeto web-resultado.txt
+project web\requirements.txt
+project web\routes\youtube_routes.py
+project web\services\subtitle_service.py
+project\app.py
+project\requirements.txt
+project\utils\__init__.py
+project\utils\chat_ia.py
+project\utils\subtitle_processor.py
+project\utils\video_history.py
+reseta tudo.bat.txt

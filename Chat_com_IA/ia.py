@@ -4,7 +4,7 @@ import json
 
 # Configuração da API
 API_URL = "http://localhost:11434/v1/chat/completions"
-MODEL_NAME = "llama3.2"  # Alterado para o modelo correto
+MODEL_NAME = "gemma2:2b"  # Alterado para o modelo correto
 
 class ChatApp(wx.Frame):
     def __init__(self, *args, **kwargs):

@@ -2,6 +2,18 @@
 :: Altera para o diretório onde o script está localizado
 cd /d %~dp0
 
+:: Verifica se o PyInstaller está instalado
+pyinstaller --version >nul 2>&1
+if %errorlevel% neq 0 (
+    echo PyInstaller nao encontrado. Instalando...
+    python -m pip install pyinstaller
+    if %errorlevel% neq 0 (
+        echo Falha ao instalar o PyInstaller. Verifique sua conexao com a internet.
+        pause
+        exit /b
+    )
+)
+
 :menu
 cls
 echo =====================================
@@ -54,9 +66,19 @@ set /p tipo_compilacao="Escolha 1 ou 2: "
 if %tipo_compilacao%==1 (
     echo Compilando o arquivo %arquivo_selecionado% com interface grafica...
     pyinstaller --onefile "%arquivo_selecionado%"
+    if %errorlevel% neq 0 (
+        echo Erro durante a compilacao. Verifique o arquivo.
+        pause
+        goto menu
+    )
 ) else if %tipo_compilacao%==2 (
     echo Compilando o arquivo %arquivo_selecionado% sem interface grafica...
     pyinstaller --onefile --noconsole "%arquivo_selecionado%"
+    if %errorlevel% neq 0 (
+        echo Erro durante a compilacao. Verifique o arquivo.
+        pause
+        goto menu
+    )
 ) else (
     echo Opcao invalida.
     pause
