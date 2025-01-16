@@ -1,0 +1,1038 @@
+Conteúdo de config.json:
+{
+  "template": "bolt-vite-react-ts"
+}
+
+
+Conteúdo de prompt:
+For all designs I ask you to make, have them be beautiful, not cookie cutter. Make webpages that are fully featured and worthy for production.
+
+By default, this template supports JSX syntax with Tailwind CSS classes, React hooks, and Lucide React for icons. Do not install other packages for UI themes, icons, etc unless absolutely necessary or I request them.
+
+Use icons from lucide-react for logos.
+
+Use stock photos from unsplash where appropriate, only valid URLs you know exist. Do not download the images, only link to them in image tags.
+
+
+
+Conteúdo de .gitignore:
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+
+Conteúdo de .gitignore copy:
+node_modules
+
+
+Conteúdo de app.py:
+from flask import Flask, render_template, request, jsonify
+import json
+import requests
+from datetime import datetime
+
+app = Flask(__name__, static_url_path='/static')
+
+# Configuração da API local
+API_URL = "http://localhost:11434/v1/chat/completions"
+DEFAULT_MODEL = "gemma2:2b"
+
+# Armazenamento temporário de conversas
+conversas = []
+
+@app.route('/')
+def home():
+    return render_template('index.html')
+
+@app.route('/enviar_mensagem', methods=['POST'])
+def enviar_mensagem():
+    try:
+        dados = request.get_json()
+        mensagem = dados.get('mensagem', '')
+        modelo = dados.get('modelo', DEFAULT_MODEL)
+        
+        # Adicionar instrução para responder em português
+        mensagem_sistema = "Por favor, responda sempre em português do Brasil de forma clara e objetiva."
+        mensagem_completa = f"{mensagem_sistema}\n\nUsuário: {mensagem}"
+        
+        # Preparar payload para a API local
+        payload = {
+            "model": modelo,
+            "messages": [
+                {"role": "system", "content": mensagem_sistema},
+                {"role": "user", "content": mensagem}
+            ]
+        }
+        
+        # Fazer requisição para a API local
+        response = requests.post(API_URL, json=payload)
+        resposta_ia = response.json()
+        
+        # Extrair a resposta da IA
+        resposta = resposta_ia.get('choices', [{}])[0].get('message', {}).get('content', 'Erro ao processar resposta')
+        
+        # Armazenar conversa
+        conversas.append({
+            'id': len(conversas) + 1,
+            'titulo': f"Conversa {len(conversas) + 1}",
+            'mensagens': [
+                {'tipo': 'usuario', 'conteudo': mensagem, 'timestamp': datetime.now().strftime("%H:%M")},
+                {'tipo': 'assistente', 'conteudo': resposta, 'timestamp': datetime.now().strftime("%H:%M")}
+            ]
+        })
+        
+        return jsonify({
+            'resposta': resposta,
+            'conversa_id': len(conversas)
+        })
+        
+    except Exception as e:
+        return jsonify({'erro': str(e)}), 500
+
+@app.route('/conversas', methods=['GET'])
+def listar_conversas():
+    return jsonify(conversas)
+
+@app.route('/conversa/<int:id>', methods=['GET'])
+def obter_conversa(id):
+    for conversa in conversas:
+        if conversa['id'] == id:
+            return jsonify(conversa)
+    return jsonify({'erro': 'Conversa não encontrada'}), 404
+
+if __name__ == '__main__':
+    app.run(debug=True)
+
+Conteúdo de index.js:
+// run `node index.js` in the terminal
+
+console.log(`Hello Node.js v${process.versions.node}!`);
+
+
+Conteúdo de package-lock.json:
+{
+  "name": "node-starter",
+  "lockfileVersion": 3,
+  "requires": true,
+  "packages": {
+    "": {
+      "name": "node-starter",
+      "dependencies": {
+        "node-starter": "file:"
+      }
+    },
+    "node_modules/node-starter": {
+      "resolved": "",
+      "link": true
+    }
+  }
+}
+
+
+Conteúdo de package.json:
+{
+  "name": "node-starter",
+  "private": true,
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "node-starter": "file:"
+  }
+}
+
+
+Conteúdo de styles.css:
+:root {
+    --bg-primary: #f7f7f8;
+    --text-primary: #000000;
+    --text-secondary: rgba(0, 0, 0, 0.7);
+    --text-disabled: rgba(0, 0, 0, 0.5);
+    --action-active: #000000;
+    --action-hover: rgba(0, 0, 0, 0.08);
+    --action-selected: rgba(0, 0, 0, 0.16);
+    --action-disabled: rgba(0, 0, 0, 0.3);
+    --action-disabled-background: rgba(0, 0, 0, 0.12);
+    --msg-user: #e6e6e6;
+    --msg-bot: #d9d9d9;
+    --sidebar-bg: #ffffff;
+    --input-bg: #ffffff;
+    --border-color: rgba(0, 0, 0, 0.12);
+}
+
+[data-theme="dark"] {
+    --bg-primary: #343541;
+    --text-primary: #fff;
+    --text-secondary: rgba(255, 255, 255, 0.7);
+    --text-disabled: rgba(255, 255, 255, 0.5);
+    --action-active: #fff;
+    --action-hover: rgba(255, 255, 255, 0.08);
+    --action-selected: rgba(255, 255, 255, 0.16);
+    --action-disabled: rgba(255, 255, 255, 0.3);
+    --action-disabled-background: rgba(255, 255, 255, 0.12);
+    --msg-user: #444654;  /* Cor alterada para melhor contraste no modo escuro */
+    --msg-bot: #444654;
+    --sidebar-bg: #202123;
+    --input-bg: #40414f;
+    --border-color: rgba(255, 255, 255, 0.12);
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    transition: background-color 0.2s, color 0.2s;
+}
+
+body {
+    font-family: 'Inter', sans-serif;
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    overflow: hidden;
+}
+
+.container {
+    display: flex;
+    height: 100vh;
+    position: relative;
+}
+
+/* Barra Lateral */
+.sidebar {
+    position: fixed;
+    width: 260px;
+    height: 100vh;
+    background-color: var(--sidebar-bg);
+    padding: 1rem;
+    border-right: 1px solid var(--border-color);
+    display: flex;
+    flex-direction: column;
+    transition: transform 0.3s ease;
+    z-index: 1000;
+}
+
+.sidebar.collapsed {
+    transform: translateX(-260px);
+}
+
+.main-content {
+    flex: 1;
+    margin-left: 260px;
+    transition: margin-left 0.3s ease;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+}
+
+.main-content.expanded {
+    margin-left: 0;
+}
+
+.new-chat-btn {
+    background-color: #19c37d;
+    color: white;
+    border: none;
+    padding: 12px;
+    border-radius: 5px;
+    cursor: pointer;
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+}
+
+.new-chat-btn:hover {
+    background-color: #15a76c;
+}
+
+.settings-btn {
+    margin-top: auto;
+    padding: 12px;
+    border: none;
+    border-radius: 5px;
+    background-color: transparent;
+    color: var(--text-primary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: background-color 0.2s;
+}
+
+.settings-btn:hover {
+    background-color: var(--action-hover);
+}
+
+.search-box {
+    position: relative;
+    margin-bottom: 1rem;
+}
+
+.search-box input {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid var(--border-color);
+    border-radius: 5px;
+    background-color: var(--input-bg);
+    color: var(--text-primary);
+}
+
+.chat-list {
+    flex: 1;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--text-disabled) transparent;
+}
+
+.chat-list::-webkit-scrollbar {
+    width: 5px;
+}
+
+.chat-list::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.chat-list::-webkit-scrollbar-thumb {
+    background-color: var(--text-disabled);
+    border-radius: 20px;
+}
+
+.chat-item {
+    padding: 0.75rem;
+    border-radius: 5px;
+    cursor: pointer;
+    margin-bottom: 0.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    transition: background-color 0.2s;
+}
+
+.chat-item:hover {
+    background-color: var(--action-hover);
+}
+
+.chat-item .action-buttons {
+    display: none;
+    gap: 0.5rem;
+}
+
+.chat-item:hover .action-buttons {
+    display: flex;
+}
+
+.chat-item .action-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    padding: 0.5rem;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.chat-item .action-btn:hover {
+    background-color: var(--action-hover);
+    color: var(--text-primary);
+}
+
+/* Top Bar */
+.top-bar {
+    padding: 1rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    border-bottom: 1px solid var(--border-color);
+    background-color: var(--bg-primary);
+}
+
+.top-bar-actions {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.theme-toggle, .header-sidebar-toggle {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--action-hover);
+    border: none;
+    border-radius: 4px;
+    color: var(--text-primary);
+    cursor: pointer;
+}
+
+.theme-toggle:hover, .header-sidebar-toggle:hover {
+    background: var(--action-selected);
+}
+
+.model-select {
+    padding: 0.5rem;
+    border-radius: 4px;
+    border: 1px solid var(--border-color);
+    background-color: var(--input-bg);
+    color: var(--text-primary);
+}
+
+/* Welcome Screen */
+.welcome-screen {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+    max-width: 800px;
+    margin: 0 auto;
+    width: 100%;
+}
+
+.welcome-screen h1 {
+    font-size: 2rem;
+    margin-bottom: 2rem;
+    color: var(--text-primary);
+}
+
+.input-box {
+    display: flex;
+    gap: 1rem;
+    width: 100%;
+    max-width: 600px;
+    margin-bottom: 2rem;
+    position: relative;
+}
+
+.input-box textarea {
+    width: 100%;
+    padding: 0.75rem;
+    padding-right: 2.5rem;
+    border: 1px solid var(--border-color);
+    border-radius: 0.5rem;
+    background-color: var(--input-bg);
+    color: var(--text-primary);
+    font-size: 1rem;
+    resize: none;
+    min-height: 44px;
+    max-height: 200px;
+    line-height: 1.5;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+.input-box textarea::-webkit-scrollbar {
+    display: none;
+}
+
+.input-box .send-btn {
+    position: absolute;
+    right: 0.5rem;
+    bottom: 0.5rem;
+    background: transparent;
+    border: none;
+    color: var(--text-primary);
+    cursor: pointer;
+    padding: 0.5rem;
+    border-radius: 4px;
+    transition: all 0.2s;
+}
+
+.input-box .send-btn:hover {
+    background-color: var(--action-hover);
+}
+
+.quick-actions {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1rem;
+    width: 100%;
+    max-width: 600px;
+}
+
+.quick-action-btn {
+    padding: 1rem;
+    border: 1px solid var(--border-color);
+    border-radius: 0.5rem;
+    background-color: var(--input-bg);
+    color: var(--text-primary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: all 0.2s;
+}
+
+.quick-action-btn:hover {
+    background-color: var(--action-hover);
+}
+
+/* Chat Container */
+.chat-container {
+    flex: 1;
+    overflow-y: auto;
+    padding: 2rem;
+    max-width: 800px;
+    margin: 0 auto;
+    width: 100%;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+.chat-container::-webkit-scrollbar {
+    display: none;
+}
+
+.message {
+    position: relative;
+    max-width: 80%;
+    margin-bottom: 1.5rem;
+    padding: 1rem;
+    border-radius: 0.5rem;
+    line-height: 1.5;
+}
+
+.message.user {
+    background-color: var(--msg-user);
+    margin-left: auto;
+    color: var(--text-primary);
+}
+
+.message.assistant {
+    background-color: var(--msg-bot);
+    margin-right: auto;
+    color: var(--text-primary);
+}
+
+.message .message-actions {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    display: none;
+    gap: 0.5rem;
+}
+
+.message:hover .message-actions {
+    display: flex;
+}
+
+.message .action-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    padding: 0.5rem;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.message .action-btn:hover {
+    background-color: var(--action-hover);
+    color: var(--text-primary);
+}
+
+/* Input Container */
+.input-container {
+    padding: 1.5rem;
+    border-top: 1px solid var(--border-color);
+    max-width: 800px;
+    margin: 0 auto;
+    width: 100%;
+}
+
+/* Loading Animation */
+.loading {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    padding: 1rem;
+}
+
+.loading span {
+    width: 8px;
+    height: 8px;
+    background-color: var(--text-primary);
+    border-radius: 50%;
+    animation: bounce 0.5s alternate infinite;
+}
+
+.loading span:nth-child(2) {
+    animation-delay: 0.1s;
+}
+
+.loading span:nth-child(3) {
+    animation-delay: 0.2s;
+}
+
+@keyframes bounce {
+    to {
+        transform: translateY(-4px);
+    }
+}
+
+/* Responsividade */
+@media (max-width: 768px) {
+    .sidebar {
+        width: 100%;
+    }
+    
+    .main-content {
+        margin-left: 0;
+    }
+    
+    .chat-container,
+    .input-container,
+    .welcome-screen {
+        padding: 1rem;
+    }
+    
+    .quick-actions {
+        grid-template-columns: 1fr;
+    }
+}
+
+Conteúdo de main.js:
+// Estado global
+let currentTheme = 'light';
+let currentModel = 'gemma2:2b';
+let conversas = [];
+let conversaAtual = null;
+
+// Elementos DOM
+const themeToggle = document.querySelector('.theme-toggle');
+const modelSelect = document.querySelector('.model-select');
+const sidebar = document.querySelector('.sidebar');
+const mainContent = document.querySelector('.main-content');
+const sidebarToggle = document.querySelector('.sidebar-toggle');
+const headerSidebarToggle = document.querySelector('.header-sidebar-toggle');
+const welcomeScreen = document.querySelector('.welcome-screen');
+const chatContainer = document.querySelector('.chat-container');
+const inputContainer = document.querySelector('.input-container');
+const welcomeForm = document.querySelector('#welcome-form');
+const chatForm = document.querySelector('#chat-form');
+const welcomeInput = document.querySelector('#welcome-input');
+const chatInput = document.querySelector('#chat-input');
+const newChatBtn = document.querySelector('.new-chat-btn');
+const searchInput = document.querySelector('#search-input');
+const chatList = document.querySelector('.chat-list');
+
+// Funções
+function toggleTheme() {
+    currentTheme = currentTheme === 'light' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', currentTheme);
+    localStorage.setItem('theme', currentTheme);
+    
+    themeToggle.innerHTML = currentTheme === 'light' 
+        ? '<i class="fas fa-moon"></i>' 
+        : '<i class="fas fa-sun"></i>';
+}
+
+function toggleSidebar() {
+    sidebar.classList.toggle('collapsed');
+    mainContent.classList.toggle('expanded');
+}
+
+function mostrarTelaInicial() {
+    welcomeScreen.style.display = 'flex';
+    chatContainer.style.display = 'none';
+    inputContainer.style.display = 'none';
+    welcomeInput.value = '';
+    chatInput.value = '';
+    conversaAtual = null;
+}
+
+function iniciarChat() {
+    welcomeScreen.style.display = 'none';
+    chatContainer.style.display = 'block';
+    inputContainer.style.display = 'block';
+    chatContainer.innerHTML = '';
+}
+
+function adicionarMensagem(texto, tipo) {
+    const mensagemDiv = document.createElement('div');
+    mensagemDiv.className = `message ${tipo}`;
+    mensagemDiv.innerHTML = `
+        ${texto}
+        <div class="message-actions">
+            <button class="action-btn" onclick="copiarMensagem(this)">
+                <i class="fas fa-copy"></i>
+            </button>
+            ${tipo === 'assistant' ? `
+                <button class="action-btn" onclick="regenerarResposta(this)">
+                    <i class="fas fa-redo"></i>
+                </button>
+            ` : ''}
+        </div>
+    `;
+    chatContainer.appendChild(mensagemDiv);
+    chatContainer.scrollTop = chatContainer.scrollHeight;
+}
+
+function mostrarCarregamento() {
+    const loadingDiv = document.createElement('div');
+    loadingDiv.className = 'loading message assistant';
+    loadingDiv.innerHTML = `
+        <span></span>
+        <span></span>
+        <span></span>
+    `;
+    chatContainer.appendChild(loadingDiv);
+    chatContainer.scrollTop = chatContainer.scrollHeight;
+    return loadingDiv;
+}
+
+async function enviarMensagem(mensagem, input) {
+    if (!mensagem.trim()) return;
+
+    if (!conversaAtual) {
+        iniciarChat();
+        conversaAtual = {
+            id: Date.now(),
+            titulo: mensagem.slice(0, 30) + (mensagem.length > 30 ? '...' : ''),
+            mensagens: []
+        };
+        conversas.push(conversaAtual);
+        // Registra a conversa imediatamente
+        atualizarListaConversas();
+    }
+
+    input.value = '';
+    input.style.height = 'auto';
+    adicionarMensagem(mensagem, 'user');
+    
+    // Registra a mensagem do usuário imediatamente
+    conversaAtual.mensagens.push({ tipo: 'user', conteudo: mensagem });
+    
+    const loadingDiv = mostrarCarregamento();
+
+    try {
+        const response = await fetch('/enviar_mensagem', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                mensagem: mensagem,
+                modelo: currentModel
+            })
+        });
+
+        const data = await response.json();
+        loadingDiv.remove();
+        
+        if (data.erro) {
+            const mensagemErro = 'Erro ao processar mensagem: ' + data.erro;
+            adicionarMensagem(mensagemErro, 'assistant');
+            conversaAtual.mensagens.push({ tipo: 'assistant', conteudo: mensagemErro });
+        } else {
+            adicionarMensagem(data.resposta, 'assistant');
+            conversaAtual.mensagens.push({ tipo: 'assistant', conteudo: data.resposta });
+        }
+        atualizarListaConversas();
+    } catch (erro) {
+        loadingDiv.remove();
+        const mensagemErro = 'Erro ao conectar com o servidor. Verifique se o servidor está rodando.';
+        adicionarMensagem(mensagemErro, 'assistant');
+        conversaAtual.mensagens.push({ tipo: 'assistant', conteudo: mensagemErro });
+        console.error('Erro:', erro);
+        atualizarListaConversas();
+    }
+}
+
+function carregarConversa(id) {
+    const conversa = conversas.find(c => c.id === id);
+    if (!conversa) return;
+
+    conversaAtual = conversa;
+    iniciarChat();
+
+    // Limpa o container de chat
+    chatContainer.innerHTML = '';
+
+    // Carrega todas as mensagens da conversa
+    conversa.mensagens.forEach(msg => {
+        adicionarMensagem(msg.conteudo, msg.tipo);
+    });
+}
+
+function atualizarListaConversas() {
+    const chatList = document.querySelector('.chat-list');
+    chatList.innerHTML = '';
+    conversas.forEach(conversa => {
+        const conversaElement = document.createElement('div');
+        conversaElement.className = 'chat-item';
+        conversaElement.onclick = () => carregarConversa(conversa.id);
+        conversaElement.innerHTML = `
+            <span>${conversa.titulo}</span>
+            <div class="action-buttons">
+                <button class="action-btn" onclick="event.stopPropagation(); renomearConversa(${conversa.id})">
+                    <i class="fas fa-edit"></i>
+                </button>
+                <button class="action-btn" onclick="event.stopPropagation(); excluirConversa(${conversa.id})">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+        `;
+        chatList.appendChild(conversaElement);
+    });
+}
+
+function copiarMensagem(button) {
+    const mensagem = button.closest('.message').textContent.trim();
+    navigator.clipboard.writeText(mensagem);
+    
+    const icon = button.querySelector('i');
+    icon.className = 'fas fa-check';
+    setTimeout(() => {
+        icon.className = 'fas fa-copy';
+    }, 1000);
+}
+
+function regenerarResposta(button) {
+    const mensagemElement = button.closest('.message');
+    const mensagemAnterior = mensagemElement.previousElementSibling;
+    if (mensagemAnterior && mensagemAnterior.classList.contains('user')) {
+        const mensagemUsuario = mensagemAnterior.textContent.trim();
+        mensagemElement.remove();
+        // Remove a última mensagem do assistente do histórico
+        if (conversaAtual) {
+            conversaAtual.mensagens.pop();
+        }
+        enviarMensagem(mensagemUsuario, chatInput);
+    }
+}
+
+function renomearConversa(id) {
+    const conversa = conversas.find(c => c.id === id);
+    if (!conversa) return;
+
+    const novoTitulo = prompt('Digite o novo título da conversa:', conversa.titulo);
+    if (novoTitulo && novoTitulo.trim()) {
+        conversa.titulo = novoTitulo.trim();
+        atualizarListaConversas();
+    }
+}
+
+function excluirConversa(id) {
+    if (confirm('Tem certeza que deseja excluir esta conversa?')) {
+        conversas = conversas.filter(c => c.id !== id);
+        if (conversaAtual && conversaAtual.id === id) {
+            mostrarTelaInicial();
+        }
+        atualizarListaConversas();
+    }
+}
+
+// Função para configurar o textarea autoexpansível
+function configureTextarea(textarea) {
+    if (!textarea) return;
+
+    textarea.addEventListener('input', function() {
+        this.style.height = 'auto';
+        this.style.height = (this.scrollHeight) + 'px';
+    });
+
+    textarea.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            const form = this.closest('form');
+            if (form) {
+                const event = new Event('submit', {
+                    'bubbles': true,
+                    'cancelable': true
+                });
+                form.dispatchEvent(event);
+            }
+        }
+    });
+}
+
+// Event Listeners
+themeToggle.addEventListener('click', toggleTheme);
+sidebarToggle?.addEventListener('click', toggleSidebar);
+headerSidebarToggle?.addEventListener('click', toggleSidebar);
+newChatBtn.addEventListener('click', mostrarTelaInicial);
+
+welcomeForm?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    enviarMensagem(welcomeInput.value, welcomeInput);
+});
+
+chatForm?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    enviarMensagem(chatInput.value, chatInput);
+});
+
+modelSelect?.addEventListener('change', (e) => {
+    currentModel = e.target.value;
+});
+
+searchInput?.addEventListener('input', function(e) {
+    const searchTerm = e.target.value.toLowerCase();
+    const chatItems = document.querySelectorAll('.chat-item');
+    
+    chatItems.forEach(item => {
+        const title = item.querySelector('span').textContent.toLowerCase();
+        if (title.includes(searchTerm)) {
+            item.style.display = 'flex';
+        } else {
+            item.style.display = 'none';
+        }
+    });
+});
+
+// Configurar textareas
+configureTextarea(document.querySelector('#chat-input'));
+configureTextarea(document.querySelector('#welcome-input'));
+
+// Inicialização
+document.addEventListener('DOMContentLoaded', () => {
+    const savedTheme = localStorage.getItem('theme') || 'light';
+    if (savedTheme === 'dark') {
+        toggleTheme();
+    }
+});
+
+Conteúdo de index.html:
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clone do ChatGPT</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body>
+    <div class="container">
+        <!-- Barra Lateral -->
+        <aside class="sidebar">
+            <button class="new-chat-btn">
+                <i class="fas fa-plus"></i>
+                Novo Chat
+            </button>
+            <div class="search-box">
+                <input type="text" id="search-input" placeholder="Pesquisar conversas...">
+            </div>
+            <div class="chat-list">
+                <!-- Lista de conversas será preenchida via JavaScript -->
+            </div>
+            <button class="settings-btn">
+                <i class="fas fa-cog"></i>
+                Configurações
+            </button>
+        </aside>
+
+        <!-- Conteúdo Principal -->
+        <main class="main-content">
+            <div class="top-bar">
+                <button class="header-sidebar-toggle">
+                    <i class="fas fa-bars"></i>
+                </button>
+                <h1 class="program-name">ChatGPT Clone</h1>
+                <div class="top-bar-actions">
+                    <button class="theme-toggle">
+                        <i class="fas fa-moon"></i>
+                    </button>
+                    <select class="model-select">
+                        <option value="gemma2:2b">gemma2:2b</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Tela de Boas-vindas -->
+            <div class="welcome-screen">
+                <h1>Como posso ajudar?</h1>
+                <form class="input-box" id="welcome-form">
+                    <textarea id="welcome-input" placeholder="Envie uma mensagem..." rows="1"></textarea>
+                    <button type="submit" class="send-btn">
+                        <i class="fas fa-paper-plane"></i>
+                    </button>
+                </form>
+                <div class="quick-actions">
+                    <button class="quick-action-btn">
+                        <i class="fas fa-lightbulb"></i>
+                        Sugerir ideias
+                    </button>
+                    <button class="quick-action-btn">
+                        <i class="fas fa-file-alt"></i>
+                        Resumir texto
+                    </button>
+                    <button class="quick-action-btn">
+                        <i class="fas fa-code"></i>
+                        Ajuda com código
+                    </button>
+                    <button class="quick-action-btn">
+                        <i class="fas fa-question-circle"></i>
+                        Tirar dúvidas
+                    </button>
+                </div>
+            </div>
+
+            <!-- Container de Chat -->
+            <div class="chat-container" style="display: none;">
+                <!-- Mensagens serão inseridas aqui -->
+            </div>
+
+            <!-- Container de Input -->
+            <div class="input-container" style="display: none;">
+                <form class="input-box" id="chat-form">
+                    <textarea id="chat-input" placeholder="Digite sua mensagem..." rows="1"></textarea>
+                    <button type="submit" class="send-btn">
+                        <i class="fas fa-paper-plane"></i>
+                    </button>
+                </form>
+            </div>
+        </main>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>
+
+
+==========================================
+Estrutura de pastas:
+==========================================
+15.01.2025-ok - Copia
+    .bolt
+        config.json
+        prompt
+    .gitignore
+    .gitignore copy
+    app.py
+    index.js
+    package-lock.json
+    package.json
+    static
+        css
+            styles.css
+        js
+            main.js
+    templates
+        index.html
